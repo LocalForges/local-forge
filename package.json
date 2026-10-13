@@ -35,7 +35,8 @@
     "test:e2e": "node _e2e.mjs",
     "test:e2e:image": "node _e2e_image.mjs",
     "test:e2e:image:ui": "node _e2e_image_component.mjs",
-    "test:e2e:selftest": "node _e2e_selftest.mjs"
+    "test:e2e:selftest": "node _e2e_selftest.mjs",
+    "test:e2e:qrcode": "node _e2e_qrcode.mjs"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
@@ -46,9 +47,11 @@
     "libarchive.js": "^2.0.2",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",
+    "qrcode": "^1.5.4",
     "upng-js": "^2.1.0",
     "vue": "^3.5.42",
-    "vue-router": "^5.3.1"
+    "vue-router": "^5.3.1",
+    "zxing-wasm": "^3.1.5"
   },
   "devDependencies": {
     "@ffmpeg/core": "0.12.10",

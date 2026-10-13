@@ -17,6 +17,7 @@ import { RouterLink, RouterView } from 'vue-router'
         <RouterLink to="/image-convert"><i class="bi bi-image"></i> 图片</RouterLink>
         <RouterLink to="/pdf-tools"><i class="bi bi-file-earmark-pdf"></i> PDF</RouterLink>
         <RouterLink to="/share-files"><i class="bi bi-share"></i> 分享</RouterLink>
+        <RouterLink to="/qr-code"><i class="bi bi-qr-code"></i> 二维码</RouterLink>
       </nav>
       <span class="badge"><i class="bi bi-shield-lock"></i> 本地处理 · 零上传</span>
     </header>

@@ -67,6 +67,7 @@ const VIEW_ROUTES = [
   { path: '/share-files', file: 'ShareFiles.vue' },
   { path: '/password-recovery', file: 'PasswordRecovery.vue' },
   { path: '/repair', file: 'Repair.vue' },
+  { path: '/qr-code', file: 'QrCode.vue' },
 ]
 async function runViewSmoke() {
   viewLoading.value = true

@@ -20,6 +20,7 @@ export async function runAllSelfTests() {
     // 自检面板统一用 selfTestST()（单线程，兼容性好）验证 ffmpeg 管线可用。
     { id: 'media', load: () => import('./media.js'), fn: 'selfTestST' },
     { id: 'pdf', load: () => import('./pdf.js'), fn: 'selfTest' },
+    { id: 'qrcode', load: () => import('./qrcode.js'), fn: 'selfTest' },
   ]
   const results = []
   for (const m of modules) {

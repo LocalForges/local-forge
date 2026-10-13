@@ -50,6 +50,11 @@ import HelpTip from '../components/HelpTip.vue'
       <li><b style="color:var(--txt)">@ffmpeg/ffmpeg 多线程内核</b>（SharedArrayBuffer）补齐网页端音视频转换</li>
       <li><b style="color:var(--txt)">upng-js（类 TinyPNG）量化</b>图片有损压缩 + 保透明，全程零上传</li>
       <li><b style="color:var(--txt)">WebRTC</b> 点对点文件直传（P2P 分享，手动信令，无需服务器）</li>
+      <li>
+        <b style="color:var(--txt)">二维码双向能力</b>：生成用 <b style="color:var(--txt)">qrcode</b>，
+        识别用 <b style="color:var(--txt)">zxing-wasm</b>（ZXing-C++ WASM 本地打包，原生 BarcodeDetector 优先）——
+        取代已停更的 jsQR / html5-qrcode，覆盖 QR · DataMatrix · Aztec · EAN · Code128 · PDF417 等 20+ 码制
+      </li>
       <li><b style="color:var(--txt)">COOP/COEP 跨源隔离头</b>真正启用，发挥多线程与 WASM 性能</li>
     </ul>
   </div>

@@ -9,6 +9,7 @@ import PdfTools from '../views/PdfTools.vue'
 import ShareFiles from '../views/ShareFiles.vue'
 import PasswordRecovery from '../views/PasswordRecovery.vue'
 import Repair from '../views/Repair.vue'
+import QrCode from '../views/QrCode.vue'
 import About from '../views/About.vue'
 import Privacy from '../views/Privacy.vue'
 
@@ -23,6 +24,7 @@ const routes = [
   { path: '/share-files', name: 'share-files', component: ShareFiles, meta: { title: 'P2P 分享' } },
   { path: '/password-recovery', name: 'password-recovery', component: PasswordRecovery, meta: { title: '密码恢复' } },
   { path: '/repair', name: 'repair', component: Repair, meta: { title: '修复归档' } },
+  { path: '/qr-code', name: 'qr-code', component: QrCode, meta: { title: '二维码工具箱' } },
   { path: '/about', name: 'about', component: About, meta: { title: '关于' } },
   { path: '/privacy', name: 'privacy', component: Privacy, meta: { title: '隐私协议' } },
 ]

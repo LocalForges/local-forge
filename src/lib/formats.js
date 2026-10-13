@@ -60,6 +60,14 @@ export const TOOLS = [
     ],
   },
   {
+    group: '二维码 / 条码',
+    items: [
+      { to: '/qr-code', icon: 'bi-qr-code', title: '生成二维码', desc: '网址/WiFi/名片/邮件/短信/定位，支持 Logo、SVG、自定义配色' },
+      { to: '/qr-code?tab=decode', icon: 'bi-upc-scan', title: '识别二维码', desc: '图片识别 · 摄像头扫码（ZXing-C++ WASM 本地内核）' },
+      { to: '/qr-code?tab=batch', icon: 'bi-collection', title: '批量生成二维码', desc: '多行内容一次生成，自动打包为 ZIP' },
+    ],
+  },
+  {
     group: '文档 / PDF',
     items: [
       { to: '/pdf-tools?mode=compress', icon: 'bi-file-earmark-pdf', title: '压缩 PDF', desc: '重压缩内嵌图像减小体积' },
