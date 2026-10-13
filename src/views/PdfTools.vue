@@ -2,6 +2,8 @@
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 import DropZone from '../components/DropZone.vue'
+import HelpTip from '../components/HelpTip.vue'
+import StatusPill from '../components/StatusPill.vue'
 import { compressPdf, mergePdf, splitPdf } from '../lib/pdf.js'
 import { formatSize, downloadBlob } from '../utils.js'
 
@@ -122,6 +124,15 @@ function downloadPart(p) {
   <h1 class="page-title">PDF 工具</h1>
   <p class="page-sub">压缩 / 预览 / 合并 / 拆分 PDF，全部在浏览器本地完成，文件不上传服务器。</p>
 
+  <HelpTip title="四个模式分别做什么？" icon="bi-file-earmark-pdf" open>
+    <ul>
+      <li><b>压缩</b>：重压缩内嵌图像以减小体积（文本型 PDF 降幅有限，属正常）。</li>
+      <li><b>预览</b>：逐页渲染为图片，本地查看，不出户。</li>
+      <li><b>合并</b>：把多个 PDF 按拖入顺序拼成一个。</li>
+      <li><b>拆分</b>：每页输出为一个独立 PDF。</li>
+    </ul>
+  </HelpTip>
+
   <div class="tabs">
     <button :class="{ active: mode === 'compress' }" @click="mode = 'compress'">压缩</button>
     <button :class="{ active: mode === 'preview' }" @click="mode = 'preview'">预览</button>
@@ -131,7 +142,7 @@ function downloadPart(p) {
 
   <!-- 压缩 -->
   <div v-if="mode === 'compress'" class="panel">
-    <DropZone :multiple="false" accept=".pdf" hint="拖放 PDF 文件" @files="onFiles" />
+    <DropZone :multiple="false" accept=".pdf" single="PDF" hint="拖放 PDF 文件" formats=".PDF" @files="onFiles" />
     <div v-if="file" class="row wrap">
       <div class="field">
         <label>图像质量 {{ Math.round(quality * 100) }}%</label>
@@ -145,7 +156,7 @@ function downloadPart(p) {
 
   <!-- 预览 -->
   <div v-if="mode === 'preview'" class="panel">
-    <DropZone :multiple="false" accept=".pdf" hint="拖放 PDF 文件" @files="onFiles" />
+    <DropZone :multiple="false" accept=".pdf" single="PDF" hint="拖放 PDF 文件" formats=".PDF" @files="onFiles" />
     <div v-if="file" class="row wrap">
       <button class="btn" :disabled="busy" @click="preview"><i class="bi bi-eye"></i> 预览</button>
     </div>
@@ -159,7 +170,7 @@ function downloadPart(p) {
 
   <!-- 合并 -->
   <div v-if="mode === 'merge'" class="panel">
-    <DropZone multiple accept=".pdf" hint="拖放多个 PDF（将按顺序合并为一个）" @files="onFiles" />
+    <DropZone multiple accept=".pdf" single="PDF" hint="拖放多个 PDF（将按顺序合并为一个）" formats=".PDF" @files="onFiles" />
     <div v-if="files.length" class="row wrap">
       <button class="btn" :disabled="busy || files.length < 2" @click="merge"><i class="bi bi-intersect"></i> 合并 {{ files.length }} 个 PDF</button>
     </div>
@@ -172,7 +183,7 @@ function downloadPart(p) {
 
   <!-- 拆分 -->
   <div v-if="mode === 'split'" class="panel">
-    <DropZone :multiple="false" accept=".pdf" hint="拖放 PDF 文件" @files="onFiles" />
+    <DropZone :multiple="false" accept=".pdf" single="PDF" hint="拖放 PDF 文件" formats=".PDF" @files="onFiles" />
     <div v-if="file" class="row wrap">
       <button class="btn" :disabled="busy" @click="split"><i class="bi bi-scissors"></i> 拆分为单页</button>
     </div>
@@ -182,6 +193,11 @@ function downloadPart(p) {
   </div>
 
   <div v-if="busy || progress" class="progress"><span :style="{ width: progress + '%' }"></span></div>
+  <div class="row wrap" style="margin:10px 0 0">
+    <StatusPill v-if="busy" state="working" :label="progress ? `处理中 ${progress}%` : '处理中…'" />
+    <StatusPill v-else-if="result" state="done" label="已生成结果" />
+    <StatusPill v-else-if="message && message.type === 'err'" state="error" :label="message.text" />
+  </div>
   <div v-if="message" class="msg" :class="message.type">{{ message.text }}</div>
 </template>
 

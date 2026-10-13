@@ -2,6 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import DropZone from '../components/DropZone.vue'
+import HelpTip from '../components/HelpTip.vue'
+import StatusPill from '../components/StatusPill.vue'
 import { extract, createArchive, convert, merge } from '../lib/archive.js'
 import { CREATE_FORMATS, COMPRESSIONS } from '../lib/formats.js'
 import { formatSize, downloadBlob, basename } from '../utils.js'
@@ -137,6 +139,16 @@ async function downloadAll() {
   <h1 class="page-title">归档工具箱</h1>
   <p class="page-sub">创建 / 解压 / 转换 / 合并任意归档格式（ZIP·7Z·TAR·ISO·RAR·APK·DMG…），全部浏览器本地完成。</p>
 
+  <HelpTip title="四个模式分别做什么？" icon="bi-collection" open>
+    <ul>
+      <li><b>创建归档</b>：把文件打包成 ZIP / TAR / TAR.GZ（可加密）。</li>
+      <li><b>解压 / 提取</b>：打开几乎所有归档格式，列出条目并可下载。</li>
+      <li><b>格式转换</b>：把 7Z / RAR / TAR 等转成 ZIP。</li>
+      <li><b>合并归档</b>：把多个归档拼成同一个（至少 2 个）。</li>
+    </ul>
+    <p style="margin:8px 0 0">加密仅用于本机处理，密码不会上传。</p>
+  </HelpTip>
+
   <div class="tabs">
     <button :class="{ active: tab === 'create' }" @click="tab = 'create'">创建归档</button>
     <button :class="{ active: tab === 'extract' }" @click="tab = 'extract'">解压 / 提取</button>
@@ -146,7 +158,7 @@ async function downloadAll() {
 
   <!-- 创建 -->
   <div v-if="tab === 'create'" class="panel">
-    <DropZone multiple hint="拖放要打包的文件/文件夹" @files="onFiles" />
+    <DropZone multiple single="文件" hint="拖放要打包的文件/文件夹" formats="任意文件 / 文件夹" @files="onFiles" />
     <div v-if="files.length" class="row wrap">
       <div class="field">
         <label>输出格式</label>
@@ -173,7 +185,7 @@ async function downloadAll() {
 
   <!-- 解压 -->
   <div v-if="tab === 'extract'" class="panel">
-    <DropZone :multiple="false" hint="拖放归档文件（ZIP/RAR/7Z/TAR/ISO/APK/DMG…）" @files="onFiles" />
+    <DropZone :multiple="false" single="归档" hint="拖放归档文件（ZIP/RAR/7Z/TAR/ISO/APK/DMG…）" formats="ZIP / RAR / 7Z / TAR / ISO / APK / DMG …" @files="onFiles" />
     <div v-if="files.length" class="row wrap">
       <div class="field">
         <label>密码（如加密）</label>
@@ -192,7 +204,7 @@ async function downloadAll() {
 
   <!-- 转换 -->
   <div v-if="tab === 'convert'" class="panel">
-    <DropZone :multiple="false" hint="拖放源归档文件" @files="onFiles" />
+    <DropZone :multiple="false" single="归档" hint="拖放源归档文件" formats="ZIP / RAR / 7Z / TAR …" @files="onFiles" />
     <div v-if="files.length" class="row wrap">
       <div class="field">
         <label>目标格式</label>
@@ -214,7 +226,7 @@ async function downloadAll() {
 
   <!-- 合并 -->
   <div v-if="tab === 'merge'" class="panel">
-    <DropZone multiple hint="拖放多个归档文件（将合并为一个）" @files="onArchives" />
+    <DropZone multiple single="归档" hint="拖放多个归档文件（将合并为一个）" formats="ZIP / TAR / 7Z …" @files="onArchives" />
     <div v-if="archives.length" class="row wrap">
       <div class="field">
         <label>输出格式</label>
@@ -232,6 +244,11 @@ async function downloadAll() {
   </div>
 
   <div v-if="busy || progress" class="progress"><span :style="{ width: progress + '%' }"></span></div>
+  <div class="row wrap" style="margin:10px 0 0">
+    <StatusPill v-if="busy" state="working" label="处理中…" />
+    <StatusPill v-else-if="result" state="done" label="已生成结果" />
+    <StatusPill v-else-if="message && message.type === 'err'" state="error" :label="message.text" />
+  </div>
   <div v-if="message" class="msg" :class="message.type">{{ message.text }}</div>
   <button v-if="result" class="btn green" @click="downloadResult"><i class="bi bi-download"></i> 下载 {{ result.name }} ({{ formatSize(result.blob.size) }})</button>
 </template>

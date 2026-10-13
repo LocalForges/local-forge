@@ -1,6 +1,9 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import DropZone from '../components/DropZone.vue'
+import HelpTip from '../components/HelpTip.vue'
+import StepBar from '../components/StepBar.vue'
+import StatusPill from '../components/StatusPill.vue'
 import { formatSize } from '../utils.js'
 
 const role = ref('send') // send | receive
@@ -118,20 +121,55 @@ function downloadRecv() {
     a.click()
   }
 }
+
+// 当前流程的步骤指引（发送方 / 接收方）
+const flowSteps = computed(() => {
+  const done = /完成/.test(status.value || '')
+  if (role.value === 'send') {
+    return [
+      { label: '生成邀请', state: localSDP.value ? 'done' : 'active' },
+      { label: '粘贴对方应答并连接', state: localSDP.value && remoteSDP.value ? 'done' : (localSDP.value ? 'active' : 'todo') },
+      { label: '发送文件', state: done ? 'done' : (localSDP.value ? 'active' : 'todo') },
+    ]
+  }
+  return [
+    { label: '粘贴对方邀请', state: remoteSDP.value ? 'done' : 'active' },
+    { label: '生成应答', state: localSDP.value ? 'done' : (remoteSDP.value ? 'active' : 'todo') },
+    { label: '接收文件', state: recvBlob.value ? 'done' : (localSDP.value ? 'active' : 'todo') },
+  ]
+})
+const flowState = computed(() => {
+  if (/完成/.test(status.value || '')) return 'done'
+  if (busy.value) return 'working'
+  if (/失败|错误/.test(status.value || '')) return 'error'
+  return 'idle'
+})
 </script>
 
 <template>
   <h1 class="page-title">P2P 文件分享</h1>
   <p class="page-sub">基于 WebRTC 点对点直传，文件不经任何服务器。两人通过复制/粘贴「邀请码」完成握手（无需后端）。</p>
 
+  <HelpTip title="怎么点对点传文件？（两步握手）" icon="bi-share" open tone="tip">
+    <ol class="howto">
+      <li><b>发送方</b>点「生成邀请」，把出现的「本端邀请」码发给对方。</li>
+      <li><b>接收方</b>把邀请码粘贴进来，点「生成应答」，再把「本端应答」码回发给发送方。</li>
+      <li>发送方粘贴应答并连接，通道建立后文件直接点对点传输，<b>不经过任何服务器</b>。</li>
+    </ol>
+    <p style="margin:8px 0 0">提示：邀请/应答码只是一串握手信息，不含文件内容；传完即断连。</p>
+  </HelpTip>
+
   <div class="tabs">
     <button :class="{ active: role === 'send' }" @click="role = 'send'">发送方</button>
     <button :class="{ active: role === 'receive' }" @click="role = 'receive'">接收方</button>
   </div>
 
+  <StepBar :steps="flowSteps" />
+
   <div class="panel">
+    <StatusPill :state="flowState" :label="status || (busy ? '处理中…' : '等待操作')" />
     <template v-if="role === 'send'">
-      <DropZone :multiple="false" hint="选择要发送的文件" @files="onFiles" />
+      <DropZone :multiple="false" single="文件" hint="选择要发送的文件" @files="onFiles" />
       <div v-if="file" class="status">待发送：<b style="color:var(--txt)">{{ file.name }}</b> · {{ formatSize(file.size) }}</div>
       <div class="row wrap">
         <button class="btn" :disabled="busy || !file" @click="startSend"><i class="bi bi-send"></i> 1. 生成邀请</button>

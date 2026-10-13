@@ -47,23 +47,49 @@ export async function convertMedia(inputData, inputName, args, outName, outMime)
   return new Blob([data.buffer], { type: outMime })
 }
 
-// 自检（默认路径：优先多线程，无 SharedArrayBuffer 时单线程回退）。
-export async function selfTest() {
-  await loadCore()
-  await ffmpeg.exec(['-f', 'lavfi', '-i', 'color=c=blue:s=32x32:d=1', '-frames:v', '1', '-c:v', 'mjpeg', 'selftest.jpg'])
-  const data = await ffmpeg.readFile('selftest.jpg')
-  return { ok: data.byteLength > 0, outSize: data.byteLength }
+// 子项收集：成功记录 detail，失败原样记录 error（message + stack）。
+async function addItem(items, id, title, fn) {
+  try {
+    const detail = await fn()
+    items.push({ id, title, ok: true, detail })
+  } catch (e) {
+    items.push({ id, title, ok: false, error: { message: e.message, stack: e.stack } })
+  }
 }
 
-// 自检（强制单线程内核）：用于无 SharedArrayBuffer 环境 / 沙箱验证管线可用。
+// 自检（默认路径：优先多线程，无 SharedArrayBuffer 时单线程回退）。返回统一结构。
+export async function selfTest() {
+  const items = []
+  await addItem(items, 'load-core', '加载 ffmpeg 内核（自动回退）', async () => {
+    await loadCore()
+    return self.crossOriginIsolated ? '多线程' : '单线程'
+  })
+  await addItem(items, 'mjpeg', 'ffmpeg 编码（mjpeg）', async () => {
+    await ffmpeg.exec(['-f', 'lavfi', '-i', 'color=c=blue:s=32x32:d=1', '-frames:v', '1', '-c:v', 'mjpeg', 'selftest.jpg'])
+    const data = await ffmpeg.readFile('selftest.jpg')
+    if (data.byteLength === 0) throw new Error('编码输出为空')
+    return data.byteLength + 'B'
+  })
+  return { module: '媒体', items }
+}
+
+// 自检（强制单线程内核）：用于无 SharedArrayBuffer 环境 / 沙箱验证管线可用。返回统一结构。
 export async function selfTestST() {
   const st = async (b) => ({
     coreURL: await toBlobURL(`${b}/ffmpeg-core.js`, 'text/javascript'),
     wasmURL: await toBlobURL(`${b}/ffmpeg-core.wasm`, 'application/wasm'),
   })
   const f2 = new FFmpeg()
-  await f2.load(await st('/ffmpeg-st'))
-  await f2.exec(['-f', 'lavfi', '-i', 'color=c=blue:s=32x32:d=1', '-frames:v', '1', '-c:v', 'mjpeg', 'st.jpg'])
-  const data = await f2.readFile('st.jpg')
-  return { ok: data.byteLength > 0, outSize: data.byteLength }
+  const items = []
+  await addItem(items, 'load-st-core', '加载 ffmpeg 单线程内核', async () => {
+    await f2.load(await st('/ffmpeg-st'))
+    return '单线程'
+  })
+  await addItem(items, 'mjpeg', 'ffmpeg 编码（mjpeg）', async () => {
+    await f2.exec(['-f', 'lavfi', '-i', 'color=c=blue:s=32x32:d=1', '-frames:v', '1', '-c:v', 'mjpeg', 'st.jpg'])
+    const data = await f2.readFile('st.jpg')
+    if (data.byteLength === 0) throw new Error('编码输出为空')
+    return data.byteLength + 'B'
+  })
+  return { module: '媒体', items }
 }

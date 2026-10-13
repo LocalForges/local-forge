@@ -2,6 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import DropZone from '../components/DropZone.vue'
+import HelpTip from '../components/HelpTip.vue'
+import StatusPill from '../components/StatusPill.vue'
 import { createZip } from '../lib/archive.js'
 import { formatSize, downloadBlob } from '../utils.js'
 
@@ -58,9 +60,23 @@ function download() {
   <h1 class="page-title">压缩为 ZIP</h1>
   <p class="page-sub">多文件 / 文件夹打包成 ZIP。支持 AES-256 密码、压缩级别、分卷拆分，全部在浏览器本地多线程完成。</p>
 
-  <DropZone :multiple="!folderMode" :directory="folderMode" hint="拖放文件或文件夹到此处" @files="onFiles" />
+  <HelpTip title="操作步骤" icon="bi-steps" open>
+    <ol class="howto">
+      <li>拖入要打包的文件，或勾选「文件夹模式」后选择整个文件夹。</li>
+      <li>按需设置：<b>压缩级别</b>（标准即可）、<b>加密密码</b>（留空则不加密）、<b>分卷大小</b>（0 表示不拆分）。</li>
+      <li>点「开始压缩」，完成后下载 <code>archive.zip</code>。</li>
+    </ol>
+    <p style="margin:8px 0 0">加密采用 AES-256，密码仅用于本机打包，不会被上传。</p>
+  </HelpTip>
+
+  <DropZone :multiple="!folderMode" :directory="folderMode" single="文件" hint="拖放文件或文件夹到此处" formats="任意文件 / 文件夹" @files="onFiles" />
 
   <div v-if="files.length" class="panel">
+    <div class="row wrap" style="margin-top:0">
+      <StatusPill v-if="busy" state="working" label="压缩中…" />
+      <StatusPill v-else-if="result" state="done" label="已生成 ZIP" />
+      <StatusPill v-else-if="message && message.type === 'err'" state="error" :label="message.text" />
+    </div>
     <div class="row wrap">
       <div class="field">
         <label>压缩级别</label>

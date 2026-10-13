@@ -1,6 +1,8 @@
 <script setup>
 import { ref } from 'vue'
 import DropZone from '../components/DropZone.vue'
+import HelpTip from '../components/HelpTip.vue'
+import StatusPill from '../components/StatusPill.vue'
 import { testZipPassword } from '../lib/archive.js'
 import { formatSize } from '../utils.js'
 
@@ -50,9 +52,22 @@ const custom = ref('')
   <h1 class="page-title">ZIP 密码恢复</h1>
   <p class="page-sub">在浏览器本地对加密 ZIP 做字典攻击（AES）。文件不出户；纯前端算力有限，适合弱密码/已知候选。</p>
 
-  <DropZone :multiple="false" accept=".zip" hint="拖放加密 ZIP 文件" @files="onFiles" />
+  <HelpTip title="它怎么工作？注意事项" icon="bi-key" open tone="warn">
+    <ol class="howto">
+      <li>拖入加密的 ZIP，点「用内置字典尝试」：会用常见弱密码逐个本地测试。</li>
+      <li>若记得部分候选，在下方粘贴<b>自定义字典</b>（空格分隔）命中率更高。</li>
+    </ol>
+    <p style="margin:8px 0 0"><b>须知</b>：仅靠浏览器算力，暴力破解强密码几乎不可行；本工具定位是「找回已知/弱密码」，请仅用于你有权限的文件。</p>
+  </HelpTip>
+
+  <DropZone :multiple="false" accept=".zip" single="ZIP" hint="拖放加密 ZIP 文件" formats=".ZIP（加密）" @files="onFiles" />
 
   <div v-if="file" class="panel">
+    <div class="row wrap" style="margin-top:0">
+      <StatusPill v-if="busy" state="working" :label="`尝试中 · 已试 ${tried}`" />
+      <StatusPill v-else-if="found" state="done" :label="`已找到密码：${found === '' ? '（空密码）' : found}`" />
+      <StatusPill v-else-if="message && message.type === 'err'" state="error" :label="message.text" />
+    </div>
     <div class="status">目标：<b style="color:var(--txt)">{{ file.name }}</b> · {{ formatSize(file.size) }} · 已尝试 <b style="color:var(--txt)">{{ tried }}</b></div>
     <div class="row wrap">
       <button class="btn" :disabled="busy" @click="recover('')"><i class="bi bi-key"></i> 用内置字典尝试</button>

@@ -185,3 +185,89 @@ export async function extractSplitZip(fileList, { password } = {}) {
   const mergedFile = new File([merged], (base || 'archive') + '.zip')
   return extract(mergedFile, { password })
 }
+
+// 浏览器内自检（供回显层调用）：覆盖创建/解压/密码/转换/合并/修复/分卷/不支持格式。
+// 返回统一结构 { module, items:[{id,title,ok,detail?,error?}] } —— 任何子测试失败都原样记录错误。
+export async function selfTest() {
+  const items = []
+  const T = async (id, title, fn) => {
+    try {
+      const detail = await fn()
+      items.push({ id, title, ok: true, detail })
+    } catch (e) {
+      items.push({ id, title, ok: false, error: { message: e.message, stack: e.stack } })
+    }
+  }
+  const enc = new TextEncoder()
+  const mk = (name, text) => new File([enc.encode(text)], name)
+
+  await T('create-zip', '创建 ZIP', async () => {
+    const b = await createZip([mk('a.txt', 'hello')])
+    if (!b.size) throw new Error('输出为空')
+    return b.size + 'B'
+  })
+  await T('create-tar', '创建 TAR', async () => {
+    const b = await createArchive([mk('a.txt', 'hello')], { outputFileName: 'x.tar' })
+    if (!b.size) throw new Error('输出为空')
+    return b.size + 'B'
+  })
+  await T('zip-extract', 'ZIP 解压回环', async () => {
+    const z = await createZip([mk('a.txt', 'hello')])
+    const es = await extract(new File([z], 'x.zip'))
+    return '条目: ' + es.map((e) => e.name).join(',')
+  })
+  await T('zip-password', '密码 ZIP 拒绝无密码/错密码', async () => {
+    const pz = await createZip([mk('a.txt', 'secret')], { password: 'test123' })
+    let noPw = false
+    let wrongPw = false
+    try { await extract(new File([pz], 'p.zip')) } catch { noPw = true }
+    try { await extract(new File([pz], 'p3.zip'), { password: 'bad' }) } catch { wrongPw = true }
+    if (!noPw) throw new Error('无密码应被拒绝')
+    if (!wrongPw) throw new Error('错误密码应被拒绝')
+    const dec = await extract(new File([pz], 'p2.zip'), { password: 'test123' })
+    return '解密成功；无密码/错密码均拒绝（' + dec.map((e) => e.name).join(',') + '）'
+  })
+  await T('convert', '格式转换 tar→zip', async () => {
+    const tar = await createArchive([mk('a.txt', 'x')], { outputFileName: 'y.tar' })
+    const conv = await convert(new File([tar], 'y.tar'), 'zip')
+    const es = await extract(new File([conv], 'c.zip'))
+    return '条目: ' + es.map((e) => e.name).join(',')
+  })
+  await T('merge', '合并多个 ZIP', async () => {
+    const z1 = await createZip([mk('a.txt', 'A')])
+    const z2 = await createZip([mk('b.txt', 'B')])
+    const m = await merge([new File([z1], 'a.zip'), new File([z2], 'b.zip')], { outExt: 'zip' })
+    const es = await extract(new File([m], 'm.zip'))
+    return '条目: ' + es.map((e) => e.name).join(',')
+  })
+  await T('repair', '损坏 ZIP 尽力修复', async () => {
+    const good = await createZip([mk('keep.txt', 'data123')])
+    const arr = new Uint8Array(await good.arrayBuffer())
+    arr[30] = 0 // 破坏中央目录某字节
+    const es = await extract(new File([arr], 'bad.zip'))
+    return es.length + ' 个条目被尽力读出'
+  })
+  await T('split-zip', '分卷 ZIP 拼接解压', async () => {
+    const big = 'x'.repeat(500)
+    const zblob = await createZip([mk('big.txt', big)])
+    const buf = new Uint8Array(await zblob.arrayBuffer())
+    const cut = 60
+    const p1 = new File([buf.slice(0, cut)], 'vol.z01')
+    const p2 = new File([buf.slice(cut)], 'vol.zip')
+    const isSet = isSplitZipSet([p1, p2])
+    const entries = await extractSplitZip([p1, p2])
+    const txt = await (await entries[0].getBlob()).text()
+    if (!isSet) throw new Error('未识别为分卷集')
+    if (txt !== big) throw new Error('拼接后内容不一致')
+    return '拼接成功: ' + entries[0].name
+  })
+  await T('unsupported-7z', '不支持格式明确报错', async () => {
+    let threw = false
+    try { await createArchive([mk('a.txt', 'x')], { outputFileName: 'x.7z' }) }
+    catch { threw = true }
+    if (!threw) throw new Error('7z 未被拒绝（应当报错）')
+    return '已正确拒绝 7z'
+  })
+
+  return { module: '归档', items }
+}

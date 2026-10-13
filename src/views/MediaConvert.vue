@@ -2,6 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import DropZone from '../components/DropZone.vue'
+import HelpTip from '../components/HelpTip.vue'
+import StatusPill from '../components/StatusPill.vue'
 import { extract } from '../lib/archive.js'
 import { convertMedia, onProgress } from '../lib/media.js'
 import { formatSize, downloadBlob, basename } from '../utils.js'
@@ -78,9 +80,22 @@ function download() {
   <h1 class="page-title">媒体转换</h1>
   <p class="page-sub">基于 @ffmpeg/ffmpeg 在浏览器内转码音视频——弥补原版网页端媒体能力短板。多线程内核（SharedArrayBuffer）优先，自动回退单线程以保证兼容性；内核默认本地打包，离线可用。</p>
 
-  <DropZone :multiple="false" accept="video/*,audio/*,.zip" hint="拖放音视频文件（或含媒体的 ZIP）" @files="onFiles" />
+  <HelpTip title="操作步骤" icon="bi-steps" open tone="tip">
+    <ol class="howto">
+      <li>拖入音视频文件（或含媒体的 ZIP 包，选择「从 ZIP 提取」）。</li>
+      <li>选「模式」与「目标格式/预设」，例如 MP4→WebM、MP4→MP3 提取音频。</li>
+      <li>点「开始转换」；<b>首次转换会先加载内核</b>（约几秒，属正常），之后更快。</li>
+    </ol>
+  </HelpTip>
+
+  <DropZone :multiple="false" accept="video/*,audio/*,.zip" single="音视频" hint="拖放音视频文件（或含媒体的 ZIP）" formats="MP4 / WebM / MOV / MP3 / WAV / ZIP" @files="onFiles" />
 
   <div v-if="file" class="panel">
+    <div class="row wrap" style="margin-top:0">
+      <StatusPill v-if="busy" state="working" :label="progress ? `转换中 ${progress}%` : '加载内核并转换中…'" />
+      <StatusPill v-else-if="result" state="done" label="转换完成" />
+      <StatusPill v-else-if="message && message.type === 'err'" state="error" :label="message.text" />
+    </div>
     <div class="row wrap">
       <div class="field">
         <label>模式</label>

@@ -2,6 +2,8 @@
 import { ref } from 'vue'
 import { ZipReader, BlobReader, BlobWriter } from '@zip.js/zip.js'
 import DropZone from '../components/DropZone.vue'
+import HelpTip from '../components/HelpTip.vue'
+import StatusPill from '../components/StatusPill.vue'
 import { isSplitZipSet, extractSplitZip } from '../lib/archive.js'
 import { formatSize, downloadBlob, basename } from '../utils.js'
 
@@ -85,9 +87,22 @@ async function downloadAll() {
   <h1 class="page-title">解压 ZIP</h1>
   <p class="page-sub">在浏览器内解压 ZIP 文件，文件不会离开你的设备。支持加密 ZIP（填写密码）与<b>分卷 ZIP</b>（一次拖入全部 .z01/.z02/…/.zip 分卷自动合并解压）。</p>
 
-  <DropZone :multiple="true" accept=".zip,.z01,.z02,.z03,.z04,.z05" hint="拖放 ZIP 文件（分卷则一次拖入所有分卷）" @files="onFiles" />
+  <HelpTip title="操作步骤" icon="bi-steps" open>
+    <ol class="howto">
+      <li>拖入 ZIP 文件；若是<b>分卷</b>（.z01/.z02/…/.zip），请一次全部拖入，会自动合并。</li>
+      <li>加密包在上方填写密码，点「重新读取」即可解密列出内容。</li>
+      <li>点单个文件的下载按钮，或「下载全部」批量导出。</li>
+    </ol>
+  </HelpTip>
+
+  <DropZone :multiple="true" accept=".zip,.z01,.z02,.z03,.z04,.z05" single="ZIP" hint="拖放 ZIP 文件（分卷则一次拖入所有分卷）" formats=".ZIP / .Z01 / .Z02 …" @files="onFiles" />
 
   <div v-if="archive" class="panel">
+    <div class="row wrap" style="margin-top:0">
+      <StatusPill v-if="busy" state="working" label="读取中…" />
+      <StatusPill v-else-if="message && message.type === 'ok'" state="done" label="已就绪" />
+      <StatusPill v-else-if="message && message.type === 'err'" state="error" :label="message.text" />
+    </div>
     <div class="row">
       <div class="field">
         <label>密码（如加密）</label>

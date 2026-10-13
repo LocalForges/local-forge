@@ -54,8 +54,8 @@ export const TOOLS = [
   {
     group: '图片',
     items: [
-      { to: '/image-convert', icon: 'bi-image', title: '图片格式转换', desc: 'PNG/JPG/WEBP 互转（浏览器原生解码）' },
-      { to: '/image-convert?mode=compress', icon: 'bi-badge-ad', title: '压缩图片', desc: '有损/无损缩小体积' },
+      { to: '/image-convert', icon: 'bi-image', title: '图片格式转换', desc: 'PNG/JPG/WEBP/AVIF 互转（浏览器原生解码）' },
+      { to: '/image-convert?mode=compress', icon: 'bi-badge-ad', title: '压缩图片', desc: 'PNG 走 upng 有损量化保透明（类 TinyPNG），JPG/WEBP/AVIF 走原生编码' },
       { to: '/image-convert?mode=view', icon: 'bi-eye', title: '查看图片', desc: '本地预览，不出户' },
     ],
   },

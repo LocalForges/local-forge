@@ -45,3 +45,45 @@ export async function splitPdf(file, { onprogress } = {}) {
   }
   return parts
 }
+
+// 浏览器内自检（供回显层调用）：覆盖合并/拆分/压缩/pdf.js 预览加载。
+// 返回统一结构 { module, items:[{id,title,ok,detail?,error?}] } —— 任何子测试失败都原样记录错误。
+export async function selfTest() {
+  const items = []
+  const T = async (id, title, fn) => {
+    try {
+      const detail = await fn()
+      items.push({ id, title, ok: true, detail })
+    } catch (e) {
+      items.push({ id, title, ok: false, error: { message: e.message, stack: e.stack } })
+    }
+  }
+  const mk = async (label) => {
+    const d = await PDFDocument.create()
+    d.addPage([200, 200]).drawText(label)
+    const bytes = await d.save()
+    return new File([bytes], label + '.pdf')
+  }
+
+  await T('merge', 'PDF 合并', async () => {
+    const m = await mergePdf([await mk('A'), await mk('B')])
+    return '合并 ' + m.count + ' 页'
+  })
+  await T('split', 'PDF 拆分', async () => {
+    const sp = await splitPdf(await mk('A'))
+    return '拆出 ' + sp.length + ' 份'
+  })
+  await T('compress', 'PDF 压缩', async () => {
+    const c = await compressPdf(await mk('A'))
+    return '原 ' + c.inSize + 'B → ' + c.outSize + 'B'
+  })
+  await T('preview', 'pdf.js 预览加载', async () => {
+    const td = await import('./test-deps.js')
+    td.pdfjs.GlobalWorkerOptions.workerSrc = td.workerUrl
+    const f = await mk('A')
+    const doc = await td.pdfjs.getDocument({ data: new Uint8Array(await f.arrayBuffer()), isEvalSupported: false }).promise
+    return doc.numPages + ' 页'
+  })
+
+  return { module: 'PDF', items }
+}
