@@ -37,9 +37,13 @@
 | **创建归档** | ZIP / TAR / TAR.GZ（自研可靠写入器，正确处理嵌套路径） | 自研 `writers.js`（USTAR） |
 | **解压 / 提取** | RAR / 7Z / TAR / ISO / APK / DMG / WIM / DNG 等 200+ 格式；**分卷 ZIP 合并解压** | [libarchive.js](https://github.com/libarchive/libarchive.js) 2.0 (WASM) |
 | **媒体转换** | MP4↔WebM↔MOV、MP4→MP3、WAV↔MP3、降码率压缩；**支持从 ZIP 内提取媒体** | [@ffmpeg/ffmpeg](https://github.com/ffmpegwasm/ffmpeg.wasm) 0.12（多线程优先 → 单线程回退 → CDN） |
-| **图片** | PNG / JPG / WEBP 互转、有损压缩、本地预览 | Canvas API |
+| **图片** | PNG / JPG / WEBP 互转、有损压缩（TinyPNG 同款 PNG 量化保透明）、**改尺寸（等比/精确/填满）**、**文字水印（9 宫格 + 平铺）**、本地预览 | Canvas API + [upng-js](https://github.com/photopea/UPNG.js) |
+| **批处理队列** | 一次拖入多份文件，套用同一操作 + 预设（网页优化 / 极限压缩 / 去 EXIF / 改尺寸 / 水印 / PDF 瘦身 / 打包），串行执行、逐项进度、可取消、结果可打包 ZIP | 复用各引擎，`src/lib/batch.js` |
+| **文档转换** | Markdown → PDF / HTML（自带零依赖解析器）；含中日韩时 PDF 自动切换 canvas 渲染通道，无需内嵌字体 | 自研 `docconvert.js` + pdf-lib |
 | **PDF** | 重压缩（内嵌图像重压 + 对象流去重）／**逐页预览（pdf.js 本地渲染）／合并多个 PDF／拆分为单页** | [pdf-lib](https://github.com/Hopding/pdf-lib) + [pdfjs-dist](https://github.com/mozilla/pdf.js) |
 | **分享 / 安全** | WebRTC P2P 直传（手动 SDP 信令，无后端）；ZIP 密码字典恢复；归档修复 | WebRTC / 本地引擎 |
+| **PWA / 离线** | 可安装（manifest + Service Worker）；**按需预缓存 WASM 内核**，断网也能用；缓存策略：外壳 network-first、内核 cache-first、静态资源 stale-while-revalidate | 自研 `public/sw.js` |
+| **多语言** | 中文 / English / 日本語 / 한국어 / Español 五语界面，自动检测系统语言 + 持久化 | 零依赖 i18n 内核 `src/lib/i18n.js` |
 
 > **关于 7Z / ISO / XZ / ZST / BZ2 的「创建」**：这些格式需要原版专有的 WASM 编码模块（网页端不可得），
 > 本项目**不伪造**其创建能力——`createArchive` 对不支持的格式会明确报错并建议改用 ZIP / TAR / TAR.GZ。
@@ -64,9 +68,21 @@ pnpm preview             # 预览构建产物（默认 http://localhost:4173）
 ## 端到端测试
 
 ```bash
-CHROMIUM_PATH=/usr/bin/chromium pnpm test:e2e        # 默认 http://localhost:5173
-BASE_URL=http://localhost:4173 pnpm test:e2e        # 针对预览构建
+pnpm test:e2e                # 基础归档能力（默认 http://localhost:5173，可用 BASE_URL 覆盖）
+pnpm test:e2e:layout         # 布局/导航
+pnpm test:e2e:features       # PWA / i18n / 跨工具工作流 / 历史筛选
+pnpm test:e2e:offline        # 离线内核按需预缓存（SW 协议）
+pnpm test:e2e:largefile      # 大文件流式读取 + 体积门禁
+pnpm test:e2e:progress       # 阶段进度模型
+pnpm test:e2e:batch          # 批处理队列
+pnpm test:e2e:imagepro       # 图片改尺寸 / 水印
+pnpm test:e2e:doc            # Markdown → PDF / HTML
+pnpm test:e2e:i18n           # 中日英韩西五语切换
+pnpm report:kernels          # 内核体积报告（构建产物 vs 实际下载）
 ```
+
+测试基于 `puppeteer-core` + 真实 Chromium 驱动浏览器。针对构建产物运行时，用
+`BASE=http://localhost:4173 pnpm test:e2e:xxx`（`vite preview`）覆盖默认端口。
 
 `pnpm test:e2e` 用 `puppeteer-core` + 真实 Chromium 驱动浏览器，覆盖：ZIP/TAR/TAR.GZ 创建（含嵌套路径）、
 AES 密码加解密回环、无密码/错密码正确拒绝、格式转换、多归档合并、不支持格式报错、归档修复、嵌套 tar 提取、
@@ -132,13 +148,16 @@ public/ffmpeg-st/    ffmpeg 单线程内核（跨源隔离不可用时的回退�
 
 ## 路线图
 
+- [x] ~~暗色 / 亮色主题切换~~（已上线，含侧栏/顶栏双布局）
+- [x] ~~i18n（中英界面）~~（已扩展为中日英韩西五语）
+- [x] ~~批量图片压缩队列与进度~~（已上线「批处理队列」，支持多种操作 + 预设）
+- [x] ~~PWA 可安装 + 离线内核按需预缓存~~
+- [x] ~~Markdown → PDF / HTML 文档转换~~
 - [ ] 7Z / ISO 创建（待可行的开源 WASM 编码方案）
-- [ ] 批量图片压缩队列与进度
 - [ ] 目录拖拽保留结构（webkitRelativePath）
-- [ ] 暗色 / 亮色主题切换
-- [ ] i18n（中英界面）
 - [ ] 接入 Google AdSense 等第三方广告（`AdSlot` 组件已预留，待申请广告账号后填充 `data-ad-client` / `data-ad-slot`）
 - [ ] 更多媒体预设（GIF、HEVC、无损提取）
+- [ ] 多端封装：Web-first + Capacitor（App）/ Tauri（桌面），复用同一套 WASM 引擎
 
 欢迎通过 Issue / PR 参与，见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 

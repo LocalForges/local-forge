@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import DropZone from '../components/DropZone.vue'
 import HelpTip from '../components/HelpTip.vue'
 import StepBar from '../components/StepBar.vue'
@@ -8,8 +8,11 @@ import StatusPill from '../components/StatusPill.vue'
 import { OCR_LANGS, recognizeImage, recognizePdf, onOcrProgress, releaseOcr, parsePages } from '../lib/ocr.js'
 import { createZip } from '../lib/archive.js'
 import { formatSize, downloadBlob, basename } from '../utils.js'
+import { consumePending, stashText } from '../lib/workflow.js'
+import { pushToast } from '../lib/toast.js'
 
 const route = useRoute()
+const router = useRouter()
 
 const tab = ref('image') // image | pdf
 const lang = ref('chi_sim+eng')
@@ -67,6 +70,14 @@ onMounted(() => {
     progressLabel.value =
       p.stage === 'lang' ? `正在下载语言包（${currentLang.value ? currentLang.value.label : lang.value}）…` : `正在识别…`
   })
+  // 跨工具工作流：接收上一步传来的图片/PDF
+  const pending = consumePending()
+  if (pending && pending.files.length) {
+    const f = pending.files[0]
+    if (/^image\//.test(f.type)) { tab.value = 'image'; onImageFiles([f]) }
+    else if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') { tab.value = 'pdf'; onPdfFiles([f]) }
+    pushToast('info', `已从「${pending.from}」载入 1 个文件`)
+  }
 })
 onBeforeUnmount(() => {
   onOcrProgress(null)
@@ -207,6 +218,14 @@ async function downloadZip() {
     say('err', '打包失败：' + (e.message || e))
   }
 }
+
+// 跨工具工作流：识别出的文本 → 文本工具箱
+function sendToText() {
+  const text = allText.value
+  if (!text) return say('err', '还没有可送出的识别结果')
+  stashText(text, '/ocr')
+  router.push('/text')
+}
 </script>
 
 <template>
@@ -278,6 +297,7 @@ async function downloadZip() {
         </button>
         <button v-if="hasText" class="btn ghost" @click="copyText"><i class="bi bi-clipboard"></i> 复制文字</button>
         <button v-if="hasText" class="btn ghost" @click="downloadTxt"><i class="bi bi-file-earmark-text"></i> 导出 TXT</button>
+        <button v-if="hasText" class="btn ghost" @click="sendToText"><i class="bi bi-code-slash"></i> 送去文本工具</button>
       </div>
       <div v-if="busy" class="progress"><span :style="{ width: progress + '%' }"></span></div>
       <div v-if="busy && progressLabel" class="hint">{{ progressLabel }} {{ progress }}%</div>
@@ -309,6 +329,7 @@ async function downloadZip() {
         </button>
         <button v-if="hasText" class="btn ghost" @click="copyText"><i class="bi bi-clipboard"></i> 复制全部</button>
         <button v-if="hasText" class="btn ghost" @click="downloadTxt"><i class="bi bi-download"></i> 合并导出 TXT</button>
+        <button v-if="hasText" class="btn ghost" @click="sendToText"><i class="bi bi-code-slash"></i> 送去文本工具</button>
         <button v-if="pdfResults.length > 1" class="btn ghost" @click="downloadZip">
           <i class="bi bi-file-earmark-zip"></i> 逐页打包 ZIP
         </button>

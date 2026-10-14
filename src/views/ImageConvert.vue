@@ -4,8 +4,11 @@ import { useRoute } from 'vue-router'
 import DropZone from '../components/DropZone.vue'
 import HelpTip from '../components/HelpTip.vue'
 import StatusPill from '../components/StatusPill.vue'
+import NextSteps from '../components/NextSteps.vue'
 import { compressImage } from '../lib/image.js'
 import { formatSize, downloadBlob, basename } from '../utils.js'
+import { consumePending } from '../lib/workflow.js'
+import { pushToast } from '../lib/toast.js'
 
 const route = useRoute()
 const mode = ref(route.query.mode || 'convert') // convert | compress | view
@@ -34,6 +37,12 @@ onMounted(() => {
   if (route.query.mode === 'compress') {
     quality.value = 0.6
     outMime.value = 'image/png'
+  }
+  // 跨工具工作流：若从上一步传来文件，自动载入
+  const pending = consumePending()
+  if (pending && pending.files.length) {
+    onFiles([pending.files[0]])
+    pushToast('info', `已从「${pending.from}」载入 1 个文件`)
   }
 })
 
@@ -123,5 +132,6 @@ function download() {
     </template>
     <div v-if="message" class="msg" :class="message.type">{{ message.text }}</div>
     <button v-if="result" class="btn green" @click="download"><i class="bi bi-download"></i> 下载 {{ result.name }} ({{ formatSize(result.blob.size) }})</button>
+    <NextSteps v-if="result" from="/image-convert" :files="[result]" />
   </div>
 </template>

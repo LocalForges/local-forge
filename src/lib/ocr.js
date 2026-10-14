@@ -11,11 +11,30 @@
 import { createWorker } from 'tesseract.js'
 
 // 本地打包的内核与 worker（public/tesseract/）
-const LOCAL_CORE = '/tesseract'
+const LOCAL_DIR = '/tesseract'
 const LOCAL_WORKER = '/tesseract/worker.min.js'
 // 回退用的官方 CDN（内核 + worker）
 const CDN_CORE = 'https://cdn.jsdelivr.net/npm/tesseract.js-core@7.0.0'
 const CDN_WORKER = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/worker.min.js'
+
+// 内核选择：显式指定具体内核文件，避免 tesseract 按目录顺序盲目探测
+// （目录模式下它总优先 relaxed-simd，会尝试加载未打包的内核而报 importScripts 失败）。
+// 我们只打包两套：simd-lstm（现代浏览器）与 lstm（不支持 SIMD 的兜底），按能力选择。
+const CORE_VARIANT = { simd: 'tesseract-core-simd-lstm.wasm.js', plain: 'tesseract-core-lstm.wasm.js' }
+
+function hasSimd() {
+  // wasm-feature-detect 的轻量替代：通过 WAT 魔数编译探测 SIMD 支持
+  try {
+    // v128 指令的最小 SIMD 模块（来自 wasm-feature-detect 的 simd 检测）
+    const bytes = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11])
+    return WebAssembly.validate(bytes)
+  } catch { return false }
+}
+
+function pickCorePath(baseDir) {
+  const variant = hasSimd() ? CORE_VARIANT.simd : CORE_VARIANT.plain
+  return `${baseDir.replace(/\/$/, '')}/${variant}`
+}
 
 // 常用语言。size 为大致首次下载量，供界面提示。
 export const OCR_LANGS = [
@@ -59,10 +78,10 @@ function makeLogger(prefix) {
 
 // 获取（或按需重建）worker。切换语言时必须重建——tesseract 的语言在初始化时载入。
 async function getWorker(langs) {
-  // 先尝试本地内核，失败再回退 CDN
+  // 先尝试本地内核（显式内核文件），失败再回退 CDN
   for (const src of [
-    { name: 'local', workerPath: LOCAL_WORKER, corePath: LOCAL_CORE },
-    { name: 'cdn', workerPath: CDN_WORKER, corePath: CDN_CORE },
+    { name: 'local', workerPath: LOCAL_WORKER, corePath: pickCorePath(LOCAL_DIR) },
+    { name: 'cdn', workerPath: CDN_WORKER, corePath: `${CDN_CORE}/${hasSimd() ? CORE_VARIANT.simd : CORE_VARIANT.plain}` },
   ]) {
     try {
       if (worker && workerLangs === langs && workerSource === src.name) return { worker, source: src.name }

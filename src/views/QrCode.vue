@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import DropZone from '../components/DropZone.vue'
 import HelpTip from '../components/HelpTip.vue'
 import StepBar from '../components/StepBar.vue'
@@ -12,8 +12,11 @@ import {
 } from '../lib/qrcode.js'
 import { createZip } from '../lib/archive.js'
 import { downloadBlob, formatSize, basename } from '../utils.js'
+import { pushToast } from '../lib/toast.js'
+import { consumePending, consumePendingText, stashText } from '../lib/workflow.js'
 
 const route = useRoute()
+const router = useRouter()
 
 /* ---------------- 生成 ---------------- */
 const TYPE_SCHEMA = {
@@ -152,7 +155,7 @@ async function downloadPng() {
   try {
     const blob = await canvasToBlob(lastCanvas.value, 'image/png')
     downloadBlob(blob, `qrcode-${Date.now()}.png`)
-    setMessage('ok', 'PNG 已下载。印刷请选 SVG（放大不糊）。')
+    pushToast('ok', 'PNG 已下载')
   } catch (e) {
     setMessage('err', '导出 PNG 失败：' + e.message)
   }
@@ -165,7 +168,7 @@ async function downloadSvg() {
       logo: logoData.value ? { image: logoData.value.image, dataUrl: logoData.value.dataUrl, ratio: 0.2 } : null,
     })
     downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `qrcode-${Date.now()}.svg`)
-    setMessage('ok', 'SVG 已下载（矢量，任意放大都清晰）。')
+    pushToast('ok', 'SVG 已下载（矢量）')
   } catch (e) {
     setMessage('err', '导出 SVG 失败：' + e.message)
   }
@@ -232,6 +235,12 @@ function toGenerate(hit) {
   type.value = 'text'
   form.text = hit.text
   setMessage('info', '已带入到「生成」标签页，可重新排版后导出。')
+}
+
+// 跨工具工作流：把识别出的文本送到文本工具箱
+function sendTextTo(hit) {
+  stashText(hit.text, '/qr-code')
+  router.push('/text')
 }
 
 /* ---------------- 识别：摄像头 ---------------- */
@@ -343,6 +352,21 @@ onMounted(() => {
   // 首次生成由 watch immediate 触发，这里只做环境提示
   if (!supportsNativeDetector()) {
     // 无原生识别器不影响功能（回退 wasm），无需打扰用户
+  }
+  // 跨工具工作流：接收文本（→ 生成二维码）或文件（→ 识别二维码）
+  const pf = consumePending()
+  if (pf && pf.files.length) {
+    tab.value = 'decode'
+    onDecodeFiles(pf.files)
+    pushToast('info', `已从「${pf.from}」载入文件用于识别`)
+    return
+  }
+  const pt = consumePendingText()
+  if (pt) {
+    type.value = 'text'
+    form.text = pt.text
+    tab.value = 'make'
+    pushToast('info', `已从「${pt.from}」载入文本并生成二维码`)
   }
 })
 </script>
@@ -568,6 +592,7 @@ onMounted(() => {
             <i class="bi bi-person-plus"></i> 下载 .vcf 名片
           </button>
           <button class="btn ghost" @click="toGenerate(hit)"><i class="bi bi-qr-code"></i> 重新生成一个</button>
+          <button class="btn ghost" @click="sendTextTo(hit)"><i class="bi bi-code-slash"></i> 送去文本工具</button>
         </div>
         <details class="raw">
           <summary>查看原始内容</summary>

@@ -1,10 +1,12 @@
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import HelpTip from '../components/HelpTip.vue'
 import {
   jsonFormat, jsonMinify, jsonValidate, base64Encode, base64Decode, hexEncode, hexDecode,
   jwtParse, regexTest, timestampToDate, dateToTimestamp, uuidV4, randomPassword, passwordStrength, shaDigest,
 } from '../lib/text.js'
+import { consumePendingText } from '../lib/workflow.js'
+import { pushToast } from '../lib/toast.js'
 
 const tab = ref('json')
 const TOOLS = [
@@ -101,6 +103,18 @@ async function runHash() {
     setMsg('err', e.message)
   }
 }
+
+// 跨工具工作流：接收上一步（OCR / 二维码识别）传来的文本
+onMounted(() => {
+  const pending = consumePendingText()
+  if (!pending) return
+  jsonIn.value = pending.text
+  codecIn.value = pending.text
+  hashIn.value = pending.text
+  // 若像 JSON 就停在 JSON 页，否则停在编码页
+  try { JSON.parse(pending.text); tab.value = 'json' } catch { tab.value = 'codec' }
+  pushToast('info', `已从「${pending.from}」载入文本（${pending.text.length} 字）`)
+})
 </script>
 
 <template>

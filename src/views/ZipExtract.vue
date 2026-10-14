@@ -1,9 +1,10 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { ZipReader, BlobReader, BlobWriter } from '@zip.js/zip.js'
 import DropZone from '../components/DropZone.vue'
 import HelpTip from '../components/HelpTip.vue'
 import StatusPill from '../components/StatusPill.vue'
+import NextSteps from '../components/NextSteps.vue'
 import { isSplitZipSet, extractSplitZip } from '../lib/archive.js'
 import { formatSize, downloadBlob, basename } from '../utils.js'
 
@@ -14,6 +15,20 @@ const password = ref('')
 const busy = ref(false)
 const progress = ref(0)
 const message = ref(null)
+
+// "下一步"要传递的文件：取所有非目录条目（惰性取出）——仅在用户点击下一步时惰性生成
+const nonDirEntries = computed(() => entries.value.filter((e) => !e.dir))
+
+async function collectEntries() {
+  const out = []
+  for (const item of nonDirEntries.value) {
+    let blob
+    if (item._blob) blob = await item._blob()
+    else blob = await item._entry.getData(new BlobWriter(), { password: password.value || undefined })
+    out.push({ blob, name: basename(item.name) })
+  }
+  return out
+}
 
 async function onFiles(list) {
   entries.value = []
@@ -130,5 +145,8 @@ async function downloadAll() {
     <div v-if="busy" class="status">读取中…</div>
     <div v-if="progress" class="progress"><span :style="{ width: progress + '%' }"></span></div>
     <div v-if="message" class="msg" :class="message.type">{{ message.text }}</div>
+
+    <NextSteps v-if="nonDirEntries.length" from="/zip-extract" :get-files="collectEntries"
+      :title="`下一步（含 ${nonDirEntries.length} 个文件）`" />
   </div>
 </template>

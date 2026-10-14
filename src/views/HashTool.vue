@@ -1,11 +1,13 @@
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import DropZone from '../components/DropZone.vue'
 import HelpTip from '../components/HelpTip.vue'
 import StatusPill from '../components/StatusPill.vue'
 import { ALGOS, hashFile, findDuplicates } from '../lib/hash.js'
 import { formatSize, downloadBlob } from '../utils.js'
+import { consumePending } from '../lib/workflow.js'
+import { pushToast } from '../lib/toast.js'
 
 const route = useRoute()
 const tab = ref('hash')
@@ -33,6 +35,15 @@ function onFiles(fs) {
   state.value = 'idle'
   if (files.value.length) setMsg('info', `已选择 ${files.value.length} 个文件，点「开始计算」。`)
 }
+
+// 跨工具工作流：接收上一步传来的文件用于哈希校验
+onMounted(() => {
+  const pending = consumePending()
+  if (pending && pending.files.length) {
+    onFiles(pending.files)
+    pushToast('info', `已从「${pending.from}」载入 ${pending.files.length} 个文件`)
+  }
+})
 
 async function runHash() {
   if (!files.value.length) { setMsg('err', '请先选择文件'); return }

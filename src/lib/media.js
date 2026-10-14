@@ -1,21 +1,43 @@
 // 音视频转换（纯前端，基于 @ffmpeg/ffmpeg 多线程内核）。
-// 优先级：本地多线程内核 /ffmpeg（需 SharedArrayBuffer）→ 本地单线程内核 /ffmpeg-st
-// （不需跨源隔离，兼容性最好）→ CDN 多线程。单线程回退保证无 SharedArrayBuffer 的浏览器也能用。
+//
+// 内核分级兜底（A-1：体积与可用性权衡后的策略）：
+//   0) 显式单线程（自检 / 诊断用）
+//   1) 本地多线程 /ffmpeg        —— 主力内核，需跨源隔离（部署已强制 COOP/COEP，32MB）
+//   2) CDN 多线程                —— 本地 MT 文件缺失/损坏时的第一兜底（免预缓存体积）
+//   3) 本地单线程 /ffmpeg-st     —— 无 SharedArrayBuffer 环境的兜底（31MB，按需下载，不进首装预缓存）
+//   4) CDN 单线程                —— 连本地 ST 都不可用时的最后兜底
+//
+// 设计要点：本地 ST 内核体积与 MT 几乎相同（31MB vs 32MB），但只在"无跨源隔离"这一
+// 少数场景才需要。故把 ST 排在 CDN-MT 之后，配合 Service Worker 不预缓存内核，
+// 使绝大多数用户（隔离环境）只下载 32MB，而非 63MB 全量。ST/CDN 仅按需拉取。
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { toBlobURL } from '@ffmpeg/util'
 
 const ffmpeg = new FFmpeg()
 let loaded = false
 
+// CDN 兜底地址（版本与 package.json 的 @ffmpeg/core-mt 保持一致）
+const CDN_MT = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.10/dist/esm'
+const CDN_ST = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm'
+
 export function onProgress(cb) {
   ffmpeg.on('progress', ({ progress: p }) => { if (p && p > 0 && p < 1) cb(Math.round(p * 100)) })
 }
 
-// 内核偏好：'auto' = 多线程→单线程→CDN；'st' = 直接单线程（自检环境更稳、更快）
+// 内核加载回调（A-5）：加载内核期间没有 ffmpeg progress 事件，但耗时可能达数秒。
+// 视图可注册此回调，在"加载内核"阶段给出不确定进度（脉冲）或阶段切换。
+let onCoreLoad = null
+export function setCoreLoadHook(cb) { onCoreLoad = cb }
+
+// 内核偏好：'auto' = 本地MT→CDN-MT→本地ST→CDN-ST；'st' = 直接单线程（自检环境更稳、更快）
 let corePreference = 'auto'
 export function setCorePreference(p) {
   corePreference = p === 'st' ? 'st' : 'auto'
 }
+
+// 记录实际生效的内核层级，供自检 / 视图回显（如 "本地多线程" / "CDN 单线程"）。
+let coreSource = ''
+export function coreSourceLabel() { return coreSource }
 
 // 内核 URL 构造器。必须定义在 loadCore 之前——否则函数体内的 const 处于 TDZ，
 // 提前调用会抛 ReferenceError 并被下面的 try/catch 静默吞掉，导致误回落到多线程内核而卡死。
@@ -29,24 +51,42 @@ const stURLs = async (b) => ({
   wasmURL: await toBlobURL(`${b}/ffmpeg-core.wasm`, 'application/wasm'),
 })
 
+// 尝试加载一个层级：成功则置 loaded 并记录来源；失败抛出由调用方决定是否继续兜底。
+async function tryLoad(loader, source) {
+  await ffmpeg.load(await loader())
+  loaded = true
+  coreSource = source
+}
+
 async function loadCore() {
   if (loaded) return
+  onCoreLoad && onCoreLoad('start')
+  try {
+    await loadCoreTiered()
+  } finally {
+    onCoreLoad && onCoreLoad(loaded ? 'end' : 'error')
+  }
+}
+
+async function loadCoreTiered() {
   // 0) 调用方显式要求单线程（自检环境更稳，避免多线程内核在无 SharedArrayBuffer 时挂起）
   if (corePreference === 'st') {
-    try { await ffmpeg.load(await stURLs('/ffmpeg-st')); loaded = true; return }
-    catch (e) { console.warn('[media] 单线程内核加载失败，回退自动选择：', e) }
+    try { await tryLoad(() => stURLs('/ffmpeg-st'), '本地单线程（指定）'); return }
+    catch (e) { console.warn('[media] 指定单线程内核加载失败，回退自动选择：', e) }
   }
-  // 1) 多线程（需跨源隔离）
+  // 1) 本地多线程（主力）：需跨源隔离。部署已强制 COOP/COEP，多数情况命中此层。
   if (self.crossOriginIsolated) {
-    try { await ffmpeg.load(await mtURLs('/ffmpeg')); loaded = true; return }
-    catch (e) { console.warn('[media] 多线程内核加载失败，回退单线程：', e) }
+    try { await tryLoad(() => mtURLs('/ffmpeg'), '本地多线程'); return }
+    catch (e) { console.warn('[media] 本地多线程内核加载失败，回退 CDN 多线程：', e) }
+    // 2) CDN 多线程（本地 MT 缺失/损坏时的第一兜底）
+    try { await tryLoad(() => mtURLs(CDN_MT), 'CDN 多线程'); return }
+    catch (e) { console.warn('[media] CDN 多线程内核加载失败，回退本地单线程：', e) }
   }
-  // 2) 单线程（兼容性好，无需 SharedArrayBuffer）
-  try { await ffmpeg.load(await stURLs('/ffmpeg-st')); loaded = true; return }
-  catch (e) { console.warn('[media] 本地单线程内核加载失败，回退 CDN：', e) }
-  // 3) CDN 多线程
-  await ffmpeg.load(await mtURLs('https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.10/dist/esm'))
-  loaded = true
+  // 3) 本地单线程（无 SharedArrayBuffer 环境的主力兜底；按需下载，不进预缓存）
+  try { await tryLoad(() => stURLs('/ffmpeg-st'), '本地单线程'); return }
+  catch (e) { console.warn('[media] 本地单线程内核加载失败，回退 CDN 单线程：', e) }
+  // 4) CDN 单线程（最后兜底）
+  await tryLoad(() => stURLs(CDN_ST), 'CDN 单线程')
 }
 
 // 显式触发内核加载（供自检 / 视图预热使用）
@@ -92,7 +132,7 @@ export async function unlinkMediaFiles(names) {
   }
 }
 export function coreMode() {
-  return { loaded, isolated: !!self.crossOriginIsolated }
+  return { loaded, isolated: !!self.crossOriginIsolated, source: coreSource }
 }
 
 // 运行一次转换：writeName 为写入虚拟文件系统的输入名，args 为完整 ffmpeg 参数，
@@ -117,12 +157,12 @@ async function addItem(items, id, title, fn) {
   }
 }
 
-// 自检（默认路径：优先多线程，无 SharedArrayBuffer 时单线程回退）。返回统一结构。
+// 自检（默认路径：本地MT→CDN-MT→本地ST→CDN-ST 分级兜底）。返回统一结构。
 export async function selfTest() {
   const items = []
-  await addItem(items, 'load-core', '加载 ffmpeg 内核（自动回退）', async () => {
+  await addItem(items, 'load-core', '加载 ffmpeg 内核（分级兜底）', async () => {
     await loadCore()
-    return self.crossOriginIsolated ? '多线程' : '单线程'
+    return coreSource || (self.crossOriginIsolated ? '多线程' : '单线程')
   })
   await addItem(items, 'mjpeg', 'ffmpeg 编码（mjpeg）', async () => {
     await ffmpeg.exec(['-f', 'lavfi', '-i', 'color=c=blue:s=32x32:d=1', '-frames:v', '1', '-c:v', 'mjpeg', 'selftest.jpg'])

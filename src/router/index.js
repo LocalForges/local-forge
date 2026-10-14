@@ -1,48 +1,74 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Home from '../views/Home.vue'
-import ZipCompress from '../views/ZipCompress.vue'
-import ZipExtract from '../views/ZipExtract.vue'
-import ArchiveTool from '../views/ArchiveTool.vue'
-import MediaConvert from '../views/MediaConvert.vue'
-import MediaPro from '../views/MediaPro.vue'
-import ImageConvert from '../views/ImageConvert.vue'
-import PdfTools from '../views/PdfTools.vue'
-import PdfPro from '../views/PdfPro.vue'
-import ShareFiles from '../views/ShareFiles.vue'
-import PasswordRecovery from '../views/PasswordRecovery.vue'
-import Repair from '../views/Repair.vue'
-import QrCode from '../views/QrCode.vue'
-import HashTool from '../views/HashTool.vue'
-import ExifTool from '../views/ExifTool.vue'
-import TextTool from '../views/TextTool.vue'
-import OcrTool from '../views/OcrTool.vue'
-import About from '../views/About.vue'
-import Privacy from '../views/Privacy.vue'
+import { NAV } from '../lib/nav.js'
 
-const routes = [
-  { path: '/', name: 'home', component: Home },
-  { path: '/zip-compress', name: 'zip-compress', component: ZipCompress, meta: { title: '压缩为 ZIP' } },
-  { path: '/zip-extract', name: 'zip-extract', component: ZipExtract, meta: { title: '解压 ZIP' } },
-  { path: '/archive', name: 'archive', component: ArchiveTool, meta: { title: '归档工具箱' } },
-  { path: '/media-convert', name: 'media-convert', component: MediaConvert, meta: { title: '媒体转换' } },
-  { path: '/media-pro', name: 'media-pro', component: MediaPro, meta: { title: '音视频进阶' } },
-  { path: '/image-convert', name: 'image-convert', component: ImageConvert, meta: { title: '图片工具' } },
-  { path: '/pdf-tools', name: 'pdf-tools', component: PdfTools, meta: { title: 'PDF 工具' } },
-  { path: '/pdf-pro', name: 'pdf-pro', component: PdfPro, meta: { title: 'PDF 进阶' } },
-  { path: '/share-files', name: 'share-files', component: ShareFiles, meta: { title: 'P2P 分享' } },
-  { path: '/password-recovery', name: 'password-recovery', component: PasswordRecovery, meta: { title: '密码恢复' } },
-  { path: '/repair', name: 'repair', component: Repair, meta: { title: '修复归档' } },
-  { path: '/qr-code', name: 'qr-code', component: QrCode, meta: { title: '二维码工具箱' } },
-  { path: '/hash', name: 'hash', component: HashTool, meta: { title: '文件哈希 / 校验' } },
-  { path: '/exif', name: 'exif', component: ExifTool, meta: { title: '照片隐私清理' } },
-  { path: '/text', name: 'text', component: TextTool, meta: { title: '文本 / 编码工具箱' } },
-  { path: '/ocr', name: 'ocr', component: OcrTool, meta: { title: 'OCR 文字识别' } },
-  { path: '/about', name: 'about', component: About, meta: { title: '关于' } },
-  { path: '/privacy', name: 'privacy', component: Privacy, meta: { title: '隐私协议' } },
-]
+// 路由级懒加载：各视图改为动态 import，首屏只加载 Home，
+// ffmpeg / OCR 等重量视图在用户真正进入时才按需拉取，显著降低首屏 JS 体积。
+const views = {
+  Home: () => import('../views/Home.vue'),
+  ZipCompress: () => import('../views/ZipCompress.vue'),
+  ZipExtract: () => import('../views/ZipExtract.vue'),
+  ArchiveTool: () => import('../views/ArchiveTool.vue'),
+  MediaConvert: () => import('../views/MediaConvert.vue'),
+  MediaPro: () => import('../views/MediaPro.vue'),
+  ImageConvert: () => import('../views/ImageConvert.vue'),
+  BatchQueue: () => import('../views/BatchQueue.vue'),
+  DocConvert: () => import('../views/DocConvert.vue'),
+  PdfTools: () => import('../views/PdfTools.vue'),
+  PdfPro: () => import('../views/PdfPro.vue'),
+  ShareFiles: () => import('../views/ShareFiles.vue'),
+  PasswordRecovery: () => import('../views/PasswordRecovery.vue'),
+  Repair: () => import('../views/Repair.vue'),
+  QrCode: () => import('../views/QrCode.vue'),
+  HashTool: () => import('../views/HashTool.vue'),
+  ExifTool: () => import('../views/ExifTool.vue'),
+  TextTool: () => import('../views/TextTool.vue'),
+  OcrTool: () => import('../views/OcrTool.vue'),
+  About: () => import('../views/About.vue'),
+  Privacy: () => import('../views/Privacy.vue'),
+}
 
-export default createRouter({
+// 视图文件名 -> 路由 path（与 NAV + SelfTestPanel 的 VIEW_ROUTES 保持一致）
+const fileToPath = {
+  'Home.vue': '/',
+  'ZipCompress.vue': '/zip-compress',
+  'ZipExtract.vue': '/zip-extract',
+  'ArchiveTool.vue': '/archive',
+  'MediaConvert.vue': '/media-convert',
+  'MediaPro.vue': '/media-pro',
+  'ImageConvert.vue': '/image-convert',
+  'BatchQueue.vue': '/batch',
+  'DocConvert.vue': '/doc-convert',
+  'PdfTools.vue': '/pdf-tools',
+  'PdfPro.vue': '/pdf-pro',
+  'ShareFiles.vue': '/share-files',
+  'PasswordRecovery.vue': '/password-recovery',
+  'Repair.vue': '/repair',
+  'QrCode.vue': '/qr-code',
+  'HashTool.vue': '/hash',
+  'ExifTool.vue': '/exif',
+  'TextTool.vue': '/text',
+  'OcrTool.vue': '/ocr',
+  'About.vue': '/about',
+  'Privacy.vue': '/privacy',
+}
+
+const routes = Object.entries(fileToPath).map(([file, path]) => ({
+  path,
+  name: path === '/' ? 'home' : path.slice(1),
+  component: views[file.replace('.vue', '')],
+  meta: { title: (NAV.find((n) => n.path === path) || {}).title || '', icon: (NAV.find((n) => n.path === path) || {}).icon || '' },
+}))
+
+const router = createRouter({
   history: createWebHistory(),
   routes,
   scrollBehavior: () => ({ top: 0 }),
 })
+
+// 同步页面标题
+router.afterEach((to) => {
+  const t = to.meta && to.meta.title ? `LocalForge · ${to.meta.title}` : 'LocalForge'
+  document.title = t
+})
+
+export default router

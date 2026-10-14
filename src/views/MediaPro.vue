@@ -170,6 +170,7 @@ async function doRun(fn) {
     </div>
 
     <p v-if="busy" class="hint"><i class="bi bi-hourglass-split"></i> 大文件会慢一些，请保持页面打开。</p>
+    <div v-if="busy" class="progress indeterminate"><span></span></div>
     <details v-if="lastCmd" class="cmd"><summary>查看实际执行的 ffmpeg 命令</summary><code>{{ lastCmd }}</code></details>
   </div>
 

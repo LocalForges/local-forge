@@ -1,32 +1,72 @@
 <script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { TOOLS } from '../lib/formats.js'
+import { NAV, navByPath, navTitle } from '../lib/nav.js'
+import { getHistory, clearHistory } from '../lib/history.js'
+import { typeOfName, TYPE_META, FILTER_ORDER, FILTER_LABEL_KEY } from '../lib/filetype.js'
+import { t, tr, locale } from '../lib/i18n.js'
 import SelfTestPanel from '../components/SelfTestPanel.vue'
+import OfflineCores from '../components/OfflineCores.vue'
 import HelpTip from '../components/HelpTip.vue'
+
+const router = useRouter()
+const recent = ref([])
+const filter = ref('all')
+
+async function loadRecent() {
+  try {
+    const list = await getHistory()
+    // 兼容老记录：缺失 type 时按文件名推断
+    recent.value = list.map((r) => ({ ...r, type: r.type || typeOfName(r.name) }))
+  } catch { recent.value = [] }
+}
+async function clearRecent() {
+  await clearHistory()
+  recent.value = []
+}
+function iconOf(path) { return (navByPath(path) || {}).icon || 'bi-clock-history' }
+function titleOf(path) { return navTitle(navByPath(path)) || path }
+function ago(ts) {
+  const s = Math.floor((Date.now() - (ts || 0)) / 1000)
+  if (s < 60) return t('home.justNow')
+  if (s < 3600) return t('home.minAgo', { n: Math.floor(s / 60) })
+  if (s < 86400) return t('home.hourAgo', { n: Math.floor(s / 3600) })
+  return t('home.dayAgo', { n: Math.floor(s / 86400) })
+}
+
+const filters = computed(() => {
+  const present = new Set(recent.value.map((r) => r.type))
+  return FILTER_ORDER.filter((f) => f === 'all' || present.has(f))
+})
+const filteredRecent = computed(() =>
+  filter.value === 'all' ? recent.value : recent.value.filter((r) => r.type === filter.value))
+const metaOf = (type) => TYPE_META[type] || TYPE_META.other
+const filterLabel = (f) => t(FILTER_LABEL_KEY[f] || f)
+
+onMounted(loadRecent)
 </script>
 
 <template>
   <!-- 英雄区 -->
   <section class="hero">
-    <span class="hero-badge"><i class="bi bi-shield-lock"></i> 纯浏览器端 · 文件零上传</span>
-    <h1 class="hero-title">本地文件工具箱 <span class="grad">LocalForge</span></h1>
-    <p class="hero-sub">
-      压缩 / 解压 / 转换 / 分享，全部在你的浏览器里完成。文件从不离开设备，
-      由 WASM 引擎多线程本地算力驱动——快、私密、离线可用。
-    </p>
+    <span class="hero-badge"><i class="bi bi-shield-lock"></i> {{ t('home.badge') }}</span>
+    <h1 class="hero-title">{{ t('home.title') }} <span class="grad">LocalForge</span></h1>
+    <p class="hero-sub">{{ t('home.sub') }}</p>
     <div class="hero-pills">
-      <span class="tag"><i class="bi bi-hdd-network"></i> 零上传 · 纯本地</span>
-      <span class="tag"><i class="bi bi-lightning-charge"></i> 多线程加速</span>
-      <span class="tag"><i class="bi bi-collection"></i> 200+ 归档格式</span>
-      <span class="tag"><i class="bi bi-phone"></i> P2P 直传</span>
+      <span class="tag"><i class="bi bi-hdd-network"></i> {{ t('home.pillLocal') }}</span>
+      <span class="tag"><i class="bi bi-lightning-charge"></i> {{ t('home.pillThread') }}</span>
+      <span class="tag"><i class="bi bi-collection"></i> {{ t('home.pillFormats') }}</span>
+      <span class="tag"><i class="bi bi-phone"></i> {{ t('home.pillP2p') }}</span>
     </div>
 
-    <HelpTip title="怎么开始？三步走" icon="bi-signpost-split" open>
+    <HelpTip :title="t('home.howtoTitle')" icon="bi-signpost-split" open>
       <ol class="howto">
-        <li>在下方选择要用的工具（如「压缩为 ZIP」「图片工具」）。</li>
-        <li>把文件拖进页面的拖放区，或点击「选择文件」（文件不会上传）。</li>
-        <li>按提示设置选项，点「开始」，处理完直接下载结果即可。</li>
+        <li>{{ t('home.howto1') }}</li>
+        <li>{{ t('home.howto2') }}</li>
+        <li>{{ t('home.howto3') }}</li>
       </ol>
-      <p style="margin:8px 0 0">所有操作都在本地完成；页面底部的「测试回显面板」可一键自检各功能是否正常。</p>
+      <p style="margin:8px 0 0">{{ t('home.howtoNote') }}</p>
     </HelpTip>
   </section>
 
@@ -34,13 +74,50 @@ import HelpTip from '../components/HelpTip.vue'
   <div v-for="g in TOOLS" :key="g.group" class="cat">
     <h2 class="cat-title"><i class="bi bi-collection"></i> {{ g.group }}</h2>
     <div class="tools">
-      <RouterLink v-for="t in g.items" :key="t.to" :to="t.to" class="tool-card">
-        <i class="bi" :class="t.icon"></i>
-        <h3>{{ t.title }}</h3>
-        <p>{{ t.desc }}</p>
+      <RouterLink v-for="item in g.items" :key="item.to" :to="item.to" class="tool-card">
+        <i class="bi" :class="item.icon"></i>
+        <h3>{{ item.title }}</h3>
+        <p>{{ item.desc }}</p>
       </RouterLink>
     </div>
   </div>
+
+  <!-- 最近处理（纯本地，IndexedDB；支持按文件类型筛选） -->
+  <div class="panel recent">
+    <div class="recent-head">
+      <h3 style="margin:0"><i class="bi bi-clock-history"></i> {{ t('home.recent') }}</h3>
+      <button v-if="recent.length" class="btn ghost sm" @click="clearRecent">
+        <i class="bi bi-eraser"></i> {{ t('home.clear') }}
+      </button>
+    </div>
+
+    <div v-if="recent.length" class="recent-filters">
+      <button
+        v-for="f in filters" :key="f" type="button"
+        class="chip" :class="{ active: filter === f }" @click="filter = f"
+      >
+        <i v-if="f !== 'all'" class="bi" :class="metaOf(f).icon"></i>
+        {{ filterLabel(f) }}
+      </button>
+    </div>
+
+    <div v-if="filteredRecent.length" class="recent-list">
+      <button v-for="r in filteredRecent" :key="r.id" class="recent-item" @click="router.push(r.path)">
+        <i class="bi" :class="iconOf(r.path)"></i>
+        <span class="recent-title">{{ titleOf(r.path) }}</span>
+        <span class="recent-name" v-if="r.name">{{ r.name }}</span>
+        <span class="recent-type" :style="{ color: metaOf(r.type).color }" :title="filterLabel(r.type)">
+          <i class="bi" :class="metaOf(r.type).icon"></i>
+        </span>
+        <span class="recent-time">{{ ago(r.t) }}</span>
+      </button>
+    </div>
+
+    <p v-else class="recent-empty">{{ t('home.recentEmpty') }}</p>
+  </div>
+
+  <!-- 离线内核（A-3：按需预缓存，真·离线可用） -->
+  <OfflineCores />
 
   <div class="panel">
     <h3 style="margin-top:0"><i class="bi bi-cpu"></i> 技术选型（相对 ezyzip.pro 的改进）</h3>
@@ -98,4 +175,38 @@ import HelpTip from '../components/HelpTip.vue'
   margin: 0 0 16px;
 }
 .hero-pills { display: flex; flex-wrap: wrap; gap: 9px; }
+
+.recent-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 10px; }
+.recent-head h3 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.recent-head h3 i { color: var(--accent, #38bdf8); }
+.recent-filters { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: 999px; cursor: pointer; font-size: 12.5px;
+  border: 1px solid var(--line, rgba(120,150,200,.16));
+  background: var(--panel-2, rgba(28,37,60,.55)); color: var(--muted, #93a2bd);
+  transition: .15s;
+}
+.chip:hover { border-color: rgba(56,189,248,.45); color: var(--txt, #e8edf7); }
+.chip.active {
+  border-color: rgba(56,189,248,.5); color: var(--accent, #38bdf8);
+  background: var(--grad-soft, rgba(56,189,248,.12));
+}
+.chip i { font-size: 13px; }
+.recent-list { display: flex; flex-direction: column; gap: 6px; }
+.recent-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 9px 11px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--line, rgba(120,150,200,.16)); background: var(--panel-2, rgba(28,37,60,.55));
+  color: var(--txt, #e8edf7); font-size: 13px; transition: .15s;
+}
+.recent-item:hover { border-color: rgba(56,189,248,.45); background: var(--grad-soft, rgba(56,189,248,.1)); }
+.recent-item i { color: var(--accent, #38bdf8); font-size: 15px; width: 18px; text-align: center; }
+.recent-title { font-weight: 600; flex: none; }
+.recent-name { color: var(--muted, #93a2bd); font-family: var(--mono, monospace); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
+.recent-type { flex: none; display: inline-flex; }
+.recent-type i { width: auto; font-size: 14px; }
+.recent-time { margin-left: auto; color: var(--faint, #6b7a96); font-size: 12px; flex: none; }
+.recent-empty { color: var(--faint, #6b7a96); font-size: 13px; margin: 4px 0 0; }
+.btn.sm { padding: 6px 11px; font-size: 12.5px; }
 </style>

@@ -90,6 +90,125 @@ export async function compressImage(file, { outMime = 'image/png', quality = 0.8
   return canvasEncode(img, outMime, quality)
 }
 
+// 改尺寸（B-2）：把图片按最大边约束缩放，保持长宽比；支持强制最短边或精确尺寸。
+// opts:
+//   maxEdge  最长边像素上限（0 表示不限制）
+//   width / height 精确目标尺寸（0 表示按比例自动）
+//   fit      'inside'（默认，等比缩到不超框）| 'cover'（填满，超出裁切）
+//   outMime / quality 输出编码
+//   pad      等比缩放后是否用透明/白底补齐到目标框（仅 'inside' + 显式 w/h 时有意义）
+export async function resizeImage(file, { maxEdge = 1600, width = 0, height = 0, fit = 'inside', outMime = 'image/jpeg', quality = 0.85, pad = false } = {}) {
+  const src = await decodeToImageData(file)
+  const sw = src.width, sh = src.height
+
+  let tw, th
+  if (width && height) { tw = width; th = height }
+  else if (width) { tw = width; th = Math.round((sh / sw) * width) }
+  else if (height) { th = height; tw = Math.round((sw / sh) * height) }
+  else {
+    const m = maxEdge || Math.max(sw, sh)
+    if (sw >= sh) { tw = Math.min(sw, m); th = Math.round((sh / sw) * tw) }
+    else { th = Math.min(sh, m); tw = Math.round((sw / sh) * th) }
+  }
+
+  const canvas = document.createElement('canvas')
+  const ctx = () => canvas.getContext('2d', { willReadFrequently: true })
+
+  if (fit === 'cover' && width && height) {
+    // 填满目标框：按较大比例缩放后居中裁切
+    canvas.width = tw; canvas.height = th
+    const scale = Math.max(tw / sw, th / sh)
+    const dw = sw * scale, dh = sh * scale
+    const c = ctx()
+    c.imageSmoothingQuality = 'high'
+    // 用临时 ImageData 绘制：先画出源到临时 canvas
+    const tmp = document.createElement('canvas'); tmp.width = sw; tmp.height = sh
+    tmp.getContext('2d').putImageData(toImageData(src), 0, 0)
+    c.drawImage(tmp, (tw - dw) / 2, (th - dh) / 2, dw, dh)
+  } else {
+    canvas.width = tw; canvas.height = th
+    const c = ctx()
+    c.imageSmoothingEnabled = true
+    c.imageSmoothingQuality = 'high'
+    if (outMime === 'image/jpeg' || pad) {
+      c.fillStyle = '#ffffff'
+      c.fillRect(0, 0, tw, th)
+    }
+    const tmp = document.createElement('canvas'); tmp.width = sw; tmp.height = sh
+    tmp.getContext('2d').putImageData(toImageData(src), 0, 0)
+    if (fit === 'inside' && width && height && pad) {
+      const scale = Math.min(tw / sw, th / sh)
+      const dw = sw * scale, dh = sh * scale
+      c.drawImage(tmp, (tw - dw) / 2, (th - dh) / 2, dw, dh)
+    } else {
+      c.drawImage(tmp, 0, 0, sw, sh, 0, 0, tw, th)
+    }
+  }
+  return encodeCanvas(canvas, outMime, quality)
+}
+
+// 水印（B-2）：在图片上叠加文字水印（支持 9 宫格位置 / 平铺 / 旋转 / 透明度）。
+// opts: text, position('center'|'top-left'|...|'tile'), opacity, fontSize, color, rotate
+export async function watermarkImage(file, { text = 'LocalForge', position = 'bottom-right', opacity = 0.35, fontSize = 0, color = '#ffffff', rotate = 0, outMime = 'image/png', quality = 0.92 } = {}) {
+  const src = await decodeToImageData(file)
+  const canvas = document.createElement('canvas')
+  canvas.width = src.width; canvas.height = src.height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.putImageData(toImageData(src), 0, 0)
+
+  const fs = fontSize || Math.max(14, Math.round(Math.min(src.width, src.height) * 0.045))
+  ctx.font = `700 ${fs}px system-ui, sans-serif`
+  ctx.fillStyle = color
+  ctx.globalAlpha = Math.max(0.02, Math.min(1, opacity))
+  ctx.textBaseline = 'middle'
+
+  const tw = ctx.measureText(text).width
+  const margin = Math.round(fs * 0.8)
+
+  const place = (x, y) => {
+    ctx.save()
+    ctx.translate(x, y)
+    if (rotate) ctx.rotate((rotate * Math.PI) / 180)
+    ctx.fillText(text, 0, 0)
+    ctx.restore()
+  }
+
+  if (position === 'tile') {
+    const stepX = tw + fs * 3
+    const stepY = fs * 4
+    for (let y = fs; y < src.height; y += stepY) {
+      for (let x = -tw; x < src.width + tw; x += stepX) place(x, y)
+    }
+  } else {
+    const pos = {
+      'top-left': [margin, margin + fs / 2],
+      'top-center': [src.width / 2 - tw / 2, margin + fs / 2],
+      'top-right': [src.width - tw - margin, margin + fs / 2],
+      'middle-left': [margin, src.height / 2],
+      center: [src.width / 2 - tw / 2, src.height / 2],
+      'middle-right': [src.width - tw - margin, src.height / 2],
+      'bottom-left': [margin, src.height - margin - fs / 2],
+      'bottom-center': [src.width / 2 - tw / 2, src.height - margin - fs / 2],
+      'bottom-right': [src.width - tw - margin, src.height - margin - fs / 2],
+    }[position] || [src.width - tw - margin, src.height - margin - fs / 2]
+    place(pos[0], pos[1])
+  }
+
+  ctx.globalAlpha = 1
+  return encodeCanvas(canvas, outMime, quality)
+}
+
+// 统一把 {data,width,height} 或 ImageData 转成 ImageData
+function toImageData(x) {
+  return x instanceof ImageData ? x : new ImageData(x.data, x.width, x.height)
+}
+// 把 canvas 编码为 Blob（PNG 走 upng 保透明量化，其余走原生编码）
+function encodeCanvas(canvas, mime, quality) {
+  const img = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height)
+  if (mime === 'image/png') return canvasEncode(img, 'image/png', undefined)
+  return canvasEncode(img, mime, quality)
+}
+
 // 浏览器内解码 Blob 并报告尺寸 + 是否含透明（与真实展示路径一致：<img> + canvas）。
 async function decodeBlob(blob) {
   const url = URL.createObjectURL(blob)

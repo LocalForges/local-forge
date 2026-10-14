@@ -1,4 +1,6 @@
-// 布局 / 响应式 e2e：验证顶栏在桌面与手机宽度下的折叠行为，以及无横向溢出
+// 布局 / 导航 e2e（双布局版）：
+// 验证 顶栏(默认) 与 侧栏 两种布局可切换并持久化、侧栏图标窄栏可展开、
+// 移动端底部标签栏、命令面板(Ctrl+K)、主题切换、各宽度零横向溢出。
 import puppeteer from 'puppeteer-core'
 
 const BASE = process.env.BASE || 'http://127.0.0.1:4173/'
@@ -10,84 +12,118 @@ function check(name, ok, detail = '') {
   console.log(`${ok ? '✓' : '✗'} ${name}${detail ? ' — ' + detail : ''}`)
 }
 
-const browser = await puppeteer.launch({
-  executablePath: '/usr/bin/chromium',
-  headless: 'new',
-  args: ['--no-sandbox', '--disable-setuid-sandbox'],
-})
-
+const browser = await puppeteer.launch({ executablePath: '/usr/bin/chromium', headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox'] })
 try {
   const page = await browser.newPage()
+  // 隔离：每次导航前固定语言为中文，避免与其它 e2e 相互串扰
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('lf-locale', 'zh-CN') } catch {} })
+  const noOverflow = async () => {
+    const r = await page.evaluate(() => ({ s: document.documentElement.scrollWidth, w: window.innerWidth }))
+    return r.s <= r.w + 1 ? null : `scrollW=${r.s} win=${r.w}`
+  }
 
-  // ---------- 桌面宽度 ----------
+  // ---------- 桌面 · 默认顶栏布局 ----------
   await page.setViewport({ width: 1280, height: 900 })
   await page.goto(BASE, { waitUntil: 'networkidle0' })
-  await new Promise((r) => setTimeout(r, 300))
-
-  const desk = await page.evaluate(() => {
-    const nav = document.querySelector('.nav')
-    const toggle = document.querySelector('.nav-toggle')
-    const badge = document.querySelector('.badge')
-    const cs = (el) => (el ? getComputedStyle(el).display : 'null')
-    return { nav: cs(nav), toggle: cs(toggle), badge: cs(badge), scrollW: document.documentElement.scrollWidth, win: window.innerWidth }
-  })
-  check('桌面：导航内联可见', desk.nav === 'flex', `nav.display=${desk.nav}`)
-  check('桌面：汉堡按钮隐藏', desk.toggle === 'none', `toggle.display=${desk.toggle}`)
-  check('桌面：零上传徽标可见', desk.badge !== 'none', `badge.display=${desk.badge}`)
-  check('桌面：无横向溢出', desk.scrollW <= desk.win + 1, `scrollW=${desk.scrollW} win=${desk.win}`)
-
-  // ---------- 手机宽度 ----------
-  await page.setViewport({ width: 390, height: 844 })
-  await page.reload({ waitUntil: 'networkidle0' })
-  await new Promise((r) => setTimeout(r, 300))
-
-  const mobClosed = await page.evaluate(() => {
-    const nav = document.querySelector('.nav')
-    const toggle = document.querySelector('.nav-toggle')
-    const cs = (el) => (el ? getComputedStyle(el).display : 'null')
-    return { nav: cs(nav), toggle: cs(toggle), badge: cs(document.querySelector('.badge')), scrollW: document.documentElement.scrollWidth, win: window.innerWidth }
-  })
-  check('手机：汉堡按钮可见', mobClosed.toggle !== 'none', `toggle.display=${mobClosed.toggle}`)
-  check('手机：抽屉默认收起', mobClosed.nav === 'none', `nav.display=${mobClosed.nav}`)
-  check('手机：徽标让位隐藏', mobClosed.badge === 'none', `badge.display=${mobClosed.badge}`)
-  check('手机：无横向溢出', mobClosed.scrollW <= mobClosed.win + 1, `scrollW=${mobClosed.scrollW} win=${mobClosed.win}`)
-
-  // 点击汉堡 → 抽屉展开
-  await page.click('.nav-toggle')
-  await new Promise((r) => setTimeout(r, 200))
-  const mobOpen = await page.evaluate(() => getComputedStyle(document.querySelector('.nav')).display)
-  check('手机：点击汉堡后抽屉展开', mobOpen === 'flex', `nav.display=${mobOpen}`)
-
-  // 点击某个导航项 → 抽屉收起 + 路由跳转
-  await page.click('.nav a[href="/qr-code"]')
   await new Promise((r) => setTimeout(r, 400))
-  const afterNav = await page.evaluate(() => ({
-    nav: getComputedStyle(document.querySelector('.nav')).display,
-    path: location.pathname,
-  }))
-  check('手机：点击入口后抽屉收起', afterNav.nav === 'none', `nav.display=${afterNav.nav}`)
-  check('手机：点击入口后正确跳转', afterNav.path === '/qr-code', `path=${afterNav.path}`)
 
-  // 二维码页在手机宽度下应为单栏（.qr-grid 折叠）
-  const qrCols = await page.evaluate(() => {
-    const g = document.querySelector('.qr-grid')
-    return g ? getComputedStyle(g).gridTemplateColumns : 'absent'
+  const d = await page.evaluate(() => {
+    const app = document.querySelector('.app')
+    const top = document.querySelector('.topbar')
+    const nav = document.querySelector('.tb-nav')
+    const tabbar = document.querySelector('.tabbar')
+    const cs = (el) => (el ? getComputedStyle(el).display : 'null')
+    return { layout: app.className, top: cs(top), nav: cs(nav), tabbar: cs(tabbar), links: nav ? nav.querySelectorAll('.tb-link').length : 0 }
   })
-  check('手机：二维码工作台折叠为单栏', qrCols === 'absent' || qrCols.split(' ').length === 1, `gridTemplateColumns="${qrCols}"`)
+  check('桌面默认：布局为顶栏', d.layout.includes('layout-topbar'), d.layout)
+  check('桌面默认：顶栏可见且含快捷入口', d.top === 'flex' && d.links >= 6, `links=${d.links}`)
+  check('桌面默认：无侧边栏', !d.layout.includes('sidebar-active'), '')
+  check('桌面默认：底部标签栏隐藏', d.tabbar === 'none', `tabbar=${d.tabbar}`)
+  let o = await noOverflow(); check('桌面默认：无横向溢出', !o, o)
 
-  // ---------- 平板宽度（768）也应走汉堡 ----------
-  await page.setViewport({ width: 768, height: 1024 })
-  await page.goto(BASE, { waitUntil: 'networkidle0' })
+  // 切换到侧栏布局
+  await page.click('[data-testid="layout-toggle"]')
+  await new Promise((r) => setTimeout(r, 350))
+  const sb = await page.evaluate(() => {
+    const s = document.querySelector('.sidebar')
+    return { has: !!s, collapsed: s ? s.classList.contains('collapsed') : null, w: s ? Math.round(s.getBoundingClientRect().width) : 0 }
+  })
+  check('切到侧栏：侧栏出现且默认收起为窄栏', sb.has && sb.collapsed && sb.w <= 60, `width=${sb.w}`)
+  const persisted = await page.evaluate(() => localStorage.getItem('lf-layout'))
+  check('布局偏好已持久化', persisted === 'sidebar', `lf-layout=${persisted}`)
+
+  // 悬停展开侧栏
+  await page.hover('.sidebar')
+  await new Promise((r) => setTimeout(r, 350))
+  const expanded = await page.evaluate(() => Math.round(document.querySelector('.sidebar').getBoundingClientRect().width))
+  check('侧栏悬停展开', expanded > 200, `width=${expanded}`)
+
+  // 切回顶栏
+  await page.click('[data-testid="layout-toggle"]')
   await new Promise((r) => setTimeout(r, 300))
-  const tab = await page.evaluate(() => ({
-    toggle: getComputedStyle(document.querySelector('.nav-toggle')).display,
-    nav: getComputedStyle(document.querySelector('.nav')).display,
-  }))
-  check('平板：汉堡按钮可见', tab.toggle !== 'none', `toggle.display=${tab.toggle}`)
-  check('平板：抽屉默认收起', tab.nav === 'none', `nav.display=${tab.nav}`)
+  const back = await page.evaluate(() => ({ layout: document.querySelector('.app').className, ls: localStorage.getItem('lf-layout') }))
+  check('切回顶栏布局', back.layout.includes('layout-topbar') && back.ls === 'topbar', back.layout)
+
+  // 命令面板
+  await page.keyboard.down('Control'); await page.keyboard.press('KeyK'); await page.keyboard.up('Control')
+  await new Promise((r) => setTimeout(r, 220))
+  check('命令面板：Ctrl+K 打开', await page.evaluate(() => !!document.querySelector('.palette')))
+  await page.type('.p-input input', 'ocr'); await new Promise((r) => setTimeout(r, 200))
+  const hit = await page.evaluate(() => (document.querySelector('.p-item .p-title') || {}).textContent || '')
+  check('命令面板：搜索 ocr 命中', /OCR/i.test(hit), `首条="${hit}"`)
+  await page.keyboard.press('Enter'); await new Promise((r) => setTimeout(r, 400))
+  const afterPal = await page.evaluate(() => ({ path: location.pathname, open: !!document.querySelector('.palette') }))
+  check('命令面板：回车跳转并关闭', afterPal.path === '/ocr' && !afterPal.open, `path=${afterPal.path}`)
+
+  // 主题
+  const t0 = await page.evaluate(() => document.documentElement.getAttribute('data-theme'))
+  await page.click('[data-testid="theme-toggle"]')
+  await new Promise((r) => setTimeout(r, 150))
+  const t1 = await page.evaluate(() => document.documentElement.getAttribute('data-theme'))
+  check('主题：切换生效', t0 !== t1, `${t0} → ${t1}`)
+
+  // ---------- 手机 · 顶栏 + 底部标签栏 ----------
+  await page.evaluate(() => localStorage.setItem('lf-layout', 'topbar'))
+  await page.setViewport({ width: 390, height: 844 })
+  await page.goto(BASE, { waitUntil: 'networkidle0' })
+  await new Promise((r) => setTimeout(r, 400))
+  const m = await page.evaluate(() => {
+    const tb = document.querySelector('.tabbar')
+    const tabs = [...document.querySelectorAll('.tabbar .tab')].map((e) => e.textContent.trim())
+    return { tabbar: tb ? getComputedStyle(tb).display : 'none', tabs }
+  })
+  check('手机：底部标签栏可见', m.tabbar === 'flex', `tabs=${m.tabs.length}`)
+  check('手机：标签含"全部"入口', m.tabs.some((t) => t.includes('全部')), m.tabs.join(' | '))
+  o = await noOverflow(); check('手机：无横向溢出', !o, o)
+
+  // 点底部标签直达工具（一步）
+  await page.click('.tabbar .tab:nth-child(4)')   // 二维码
+  await new Promise((r) => setTimeout(r, 400))
+  check('手机：底部标签一键直达', (await page.evaluate(() => location.pathname)) === '/qr-code', await page.evaluate(() => location.pathname))
+
+  // 底部"全部"打开命令面板
+  await page.click('.tabbar .tab:last-child'); await new Promise((r) => setTimeout(r, 250))
+  check('手机：底部"全部"打开命令面板', await page.evaluate(() => !!document.querySelector('.palette')))
+  await page.keyboard.press('Escape'); await new Promise((r) => setTimeout(r, 200))
+
+  // 移动端侧栏布局 → 抽屉
+  await page.evaluate(() => localStorage.setItem('lf-layout', 'sidebar'))
+  await page.goto(BASE, { waitUntil: 'networkidle0' }); await new Promise((r) => setTimeout(r, 350))
+  const sbM = await page.evaluate(() => Math.round(document.querySelector('.sidebar').getBoundingClientRect().left))
+  check('手机(侧栏布局)：默认离屏', sbM < -10, `left=${sbM}`)
+  await page.click('.nav-toggle'); await new Promise((r) => setTimeout(r, 300))
+  check('手机(侧栏布局)：点开抽屉', (await page.evaluate(() => document.querySelector('.sidebar').getBoundingClientRect().left)) > -10)
+  await page.keyboard.press('Escape'); await new Promise((r) => setTimeout(r, 300))
+  check('手机(侧栏布局)：Esc 收起', (await page.evaluate(() => document.querySelector('.sidebar').getBoundingClientRect().left)) < -10)
+
+  // ---------- 平板 ----------
+  await page.setViewport({ width: 768, height: 1024 })
+  await page.goto(BASE, { waitUntil: 'networkidle0' }); await new Promise((r) => setTimeout(r, 300))
+  check('平板：底部标签栏可见', (await page.evaluate(() => getComputedStyle(document.querySelector('.tabbar')).display)) === 'flex')
+  o = await noOverflow(); check('平板：无横向溢出', !o, o)
 } finally {
   await browser.close()
 }
 
-console.log(`\n布局 e2e：${results.length - failed}/${results.length} 通过`)
+console.log(`\n布局/导航 e2e：${results.length - failed}/${results.length} 通过`)
 process.exit(failed ? 1 : 0)

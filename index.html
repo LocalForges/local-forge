@@ -3,13 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/icons/favicon-64.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="LocalForge · 纯浏览器端的本地文件工具箱：压缩、解压、格式转换、媒体转码、PDF 处理、P2P 直传。全部在本地完成，文件不出设备，无需上传服务器。" />
     <meta name="theme-color" content="#0f172a" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="LocalForge" />
     <title>LocalForge · 本地文件工具箱</title>
   </head>
   <body>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
+    <script>
+      // PWA：注册 Service Worker。https 与 localhost/127.0.0.1 均为安全上下文，可注册；
+      // 其余（如 file:// 或 http 内网 IP）自动跳过，不影响使用。
+      if ('serviceWorker' in navigator && (window.isSecureContext)) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js').catch(function () { /* 注册失败不阻断使用 */ })
+        })
+      }
+    </script>
   </body>
 </html>

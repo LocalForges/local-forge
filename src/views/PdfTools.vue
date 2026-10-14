@@ -1,11 +1,14 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import DropZone from '../components/DropZone.vue'
 import HelpTip from '../components/HelpTip.vue'
 import StatusPill from '../components/StatusPill.vue'
+import NextSteps from '../components/NextSteps.vue'
 import { compressPdf, mergePdf, splitPdf } from '../lib/pdf.js'
 import { formatSize, downloadBlob } from '../utils.js'
+import { consumePending } from '../lib/workflow.js'
+import { pushToast } from '../lib/toast.js'
 
 const route = useRoute()
 const mode = ref(route.query.mode || 'compress') // compress | preview | merge | split
@@ -28,6 +31,15 @@ function onFiles(list) {
   message.value = null
   progress.value = 0
 }
+
+// 跨工具工作流：接收上一步传来的文件（图片/PDF）
+onMounted(() => {
+  const pending = consumePending()
+  if (pending && pending.files.length) {
+    onFiles(pending.files)
+    pushToast('info', `已从「${pending.from}」载入 ${pending.files.length} 个文件`)
+  }
+})
 
 async function compress() {
   if (!file.value) return
@@ -152,6 +164,7 @@ function downloadPart(p) {
     </div>
     <div v-if="result" class="msg ok">已生成：{{ result.name }}</div>
     <button v-if="result" class="btn green" @click="download"><i class="bi bi-download"></i> 下载 {{ result.name }}</button>
+    <NextSteps v-if="result" from="/pdf-tools" :files="[result]" />
   </div>
 
   <!-- 预览 -->
@@ -179,6 +192,7 @@ function downloadPart(p) {
     </ul>
     <div v-if="result" class="msg ok">已生成：{{ result.name }}</div>
     <button v-if="result" class="btn green" @click="download"><i class="bi bi-download"></i> 下载 {{ result.name }}</button>
+    <NextSteps v-if="result" from="/pdf-tools" :files="[result]" />
   </div>
 
   <!-- 拆分 -->

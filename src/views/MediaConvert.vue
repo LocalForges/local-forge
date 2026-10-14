@@ -5,7 +5,10 @@ import DropZone from '../components/DropZone.vue'
 import HelpTip from '../components/HelpTip.vue'
 import StatusPill from '../components/StatusPill.vue'
 import { extract } from '../lib/archive.js'
-import { convertMedia, onProgress } from '../lib/media.js'
+import { convertMedia, onProgress, setCoreLoadHook } from '../lib/media.js'
+import { toUint8, guardSize } from '../lib/fileio.js'
+import { createProgress } from '../lib/progress.js'
+import PhaseProgress from '../components/PhaseProgress.vue'
 import { formatSize, downloadBlob, basename } from '../utils.js'
 
 const route = useRoute()
@@ -25,14 +28,30 @@ const file = ref(null)
 const presetId = ref('mp4-webm')
 const busy = ref(false)
 const progress = ref(0)
+const readPct = ref(0)
 const message = ref(null)
 const result = ref(null)
+const sizeWarn = ref(null)
+
+// A-5 阶段进度：加载内核 → 读取文件 → 转码
+const phase = createProgress([
+  { id: 'core', label: '内核', weight: 2 },
+  { id: 'read', label: '读取', weight: 1 },
+  { id: 'run', label: '转码', weight: 7 },
+])
+const showPhase = ref(false)
 
 const preset = computed(() => presets.find((p) => p.id === presetId.value))
 
 onMounted(() => {
   if (mode.value === 'compress') presetId.value = 'compress'
-  onProgress((p) => { progress.value = p })
+  onProgress((p) => { progress.value = p; phase.set('run', p / 100) })
+  // 内核加载阶段无进度事件，用钩子切换阶段（首次约数秒）
+  setCoreLoadHook((state) => {
+    if (state === 'start') phase.set('core', 0.15)
+    else if (state === 'end') phase.set('core', 1)
+    else phase.set('core', 0)
+  })
 })
 
 function onFiles(list) {
@@ -40,6 +59,8 @@ function onFiles(list) {
   result.value = null
   message.value = null
   progress.value = 0
+  readPct.value = 0
+  sizeWarn.value = file.value ? guardSize(file.value) : null
 }
 async function resolveInputData() {
   // 若从 ZIP 内提取媒体
@@ -49,21 +70,35 @@ async function resolveInputData() {
     if (!media) throw new Error('压缩包内未找到常见音视频文件。')
     return { data: new Uint8Array(await (await media.getBlob()).arrayBuffer()), name: 'input' }
   }
-  const { fetchFile } = await import('@ffmpeg/util')
-  return { data: await fetchFile(file.value), name: 'input' }
+  // 大文件走分块流式读取（A-4），避免一次性大分配导致 OOM
+  const data = await toUint8(file.value, (p) => {
+    readPct.value = p.total ? Math.round((p.offset / p.total) * 100) : 0
+    phase.set('read', p.total ? p.offset / p.total : 1)
+  })
+  return { data, name: 'input' }
 }
 async function convert() {
   if (!file.value) return
+  if (sizeWarn.value && sizeWarn.value.level === 'block') {
+    message.value = { type: 'err', text: sizeWarn.value.message }
+    return
+  }
   busy.value = true
   progress.value = 0
+  readPct.value = 0
+  phase.reset()
+  showPhase.value = true
   message.value = { type: 'info', text: '加载内核并转换中…' }
   try {
+    // 内核已加载时直接置满，避免阶段卡在"内核"
+    phase.set('core', 1)
     const { data, name } = await resolveInputData()
     const outName = 'output.' + preset.value.out
     const args = preset.value.args.map((a) => (a === 'IN' ? name : a === 'OUT' ? outName : a))
     const blob = await convertMedia(data, name, args, outName, preset.value.mime)
     result.value = { blob, name: outName }
     progress.value = 100
+    phase.finish()
     message.value = { type: 'ok', text: `转换完成：${formatSize(blob.size)}` }
   } catch (e) {
     message.value = { type: 'err', text: '转换失败：' + (e.message || e) }
@@ -92,7 +127,7 @@ function download() {
 
   <div v-if="file" class="panel">
     <div class="row wrap" style="margin-top:0">
-      <StatusPill v-if="busy" state="working" :label="progress ? `转换中 ${progress}%` : '加载内核并转换中…'" />
+      <StatusPill v-if="busy" state="working" :label="progress ? `转换中 ${progress}%` : (readPct ? `读取文件 ${readPct}%` : '加载内核并转换中…')" />
       <StatusPill v-else-if="result" state="done" label="转换完成" />
       <StatusPill v-else-if="message && message.type === 'err'" state="error" :label="message.text" />
     </div>
@@ -112,7 +147,12 @@ function download() {
       <button class="btn" :disabled="busy" @click="convert"><i class="bi bi-arrow-left-right"></i> 开始转换</button>
     </div>
     <div class="status">源文件：<b style="color:var(--txt)">{{ file.name }}</b> · {{ formatSize(file.size) }}</div>
-    <div v-if="busy || progress" class="progress"><span :style="{ width: progress + '%' }"></span></div>
+    <div v-if="sizeWarn && sizeWarn.level !== 'ok'" class="msg" :class="sizeWarn.level === 'block' ? 'err' : 'info'">
+      <i class="bi" :class="sizeWarn.level === 'block' ? 'bi-x-octagon' : 'bi-exclamation-triangle'"></i>
+      {{ sizeWarn.message }}
+    </div>
+    <PhaseProgress v-if="busy && showPhase" :progress="phase" />
+    <div v-else-if="progress" class="progress"><span :style="{ width: progress + '%' }"></span></div>
     <div v-if="message" class="msg" :class="message.type">{{ message.text }}</div>
     <button v-if="result" class="btn green" @click="download"><i class="bi bi-download"></i> 下载 {{ result.name }} ({{ formatSize(result.blob.size) }})</button>
   </div>

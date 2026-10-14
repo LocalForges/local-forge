@@ -6,6 +6,7 @@
 //   - 全部在本地虚拟文件系统里完成，媒体文件从不上传
 
 import { writeMediaFile, execMedia, readMediaFiles, unlinkMediaFiles, coreMode, ensureMediaCore, setCorePreference } from './media.js'
+import { toUint8 } from './fileio.js'
 
 const extOf = (name) => (String(name).split('.').pop() || '').toLowerCase()
 
@@ -45,21 +46,21 @@ export async function probeMedia(file) {
 }
 
 /* ---------------- 视频 → GIF ---------------- */
-export async function videoToGif(file, { fps = 10, width = 480, start = 0, duration = 0 } = {}) {
+export async function videoToGif(file, { fps = 10, width = 480, start = 0, duration = 0, onRead } = {}) {
   const inName = sanitize(file.name)
   const outName = 'out.gif'
   const vf = `fps=${Math.max(1, Math.min(30, fps))},scale=${Math.max(64, Math.min(1280, width))}:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`
   const args = ['-ss', String(start || 0), '-i', inName]
   if (duration > 0) args.push('-t', String(duration))
   args.push('-vf', vf, '-loop', '0', outName)
-  await writeMediaFile(inName, new Uint8Array(await file.arrayBuffer()))
+  await writeMediaFile(inName, await toUint8(file, onRead))
   const [out] = await execMedia(args, [{ name: outName, mime: 'image/gif' }])
   await unlinkMediaFiles([inName, outName])
   return { blob: out.blob, name: `${file.name.replace(/\.[^.]+$/, '')}.gif`, cmd: 'ffmpeg ' + args.join(' ') }
 }
 
 /* ---------------- 提取音频 ---------------- */
-export async function extractAudio(file, { mode = 'copy', bitrate = '192k' } = {}) {
+export async function extractAudio(file, { mode = 'copy', bitrate = '192k', onRead } = {}) {
   const inName = sanitize(file.name)
   const ext = extOf(file.name)
   let outName = 'out.m4a'
@@ -75,20 +76,20 @@ export async function extractAudio(file, { mode = 'copy', bitrate = '192k' } = {
     outName = ext === 'mp3' ? 'out.mp3' : 'out.m4a'
     args = ['-i', inName, '-vn', '-c:a', 'copy', outName]
   }
-  await writeMediaFile(inName, new Uint8Array(await file.arrayBuffer()))
+  await writeMediaFile(inName, await toUint8(file, onRead))
   const [out] = await execMedia(args, [{ name: outName, mime: outName.endsWith('wav') ? 'audio/wav' : outName.endsWith('mp3') ? 'audio/mpeg' : 'audio/mp4' }])
   await unlinkMediaFiles([inName, outName])
   return { blob: out.blob, name: `${file.name.replace(/\.[^.]+$/, '')}-audio.${outName.split('.').pop()}`, cmd: 'ffmpeg ' + args.join(' ') }
 }
 
 /* ---------------- 批量抽帧 ---------------- */
-export async function extractFrames(file, { fps = 1, max = 12, format = 'image/png' } = {}) {
+export async function extractFrames(file, { fps = 1, max = 12, format = 'image/png', onRead } = {}) {
   const inName = sanitize(file.name)
   const ext = format === 'image/jpeg' ? 'jpg' : 'png'
   const total = Math.max(1, Math.min(60, Number(max) || 12))
   const pattern = `frame-%04d.${ext}`
   const args = ['-i', inName, '-vf', `fps=${Math.max(0.1, Number(fps) || 1)}`, '-frames:v', String(total), pattern]
-  await writeMediaFile(inName, new Uint8Array(await file.arrayBuffer()))
+  await writeMediaFile(inName, await toUint8(file, onRead))
   await execMedia(args, [])
   // ffmpeg 按序列命名，逐个读回（读不到即已到结尾）
   const parts = []
@@ -111,7 +112,7 @@ export async function extractFrames(file, { fps = 1, max = 12, format = 'image/p
 }
 
 /* ---------------- 按时间段裁剪 ---------------- */
-export async function clipMedia(file, { start = 0, duration = 10, reencode = false } = {}) {
+export async function clipMedia(file, { start = 0, duration = 10, reencode = false, onRead } = {}) {
   const inName = sanitize(file.name)
   const outExt = reencode ? 'mp4' : extOf(file.name) || 'mp4'
   const outName = `clip.${outExt}`
@@ -119,7 +120,7 @@ export async function clipMedia(file, { start = 0, duration = 10, reencode = fal
   const args = ['-ss', String(start || 0), '-i', inName, '-t', String(Math.max(0.1, duration || 10)), '-avoid_negative_ts', 'make_zero']
   args.push(...(reencode ? ['-c:v', 'mpeg4', '-c:a', 'aac'] : ['-c', 'copy']))
   args.push(outName)
-  await writeMediaFile(inName, new Uint8Array(await file.arrayBuffer()))
+  await writeMediaFile(inName, await toUint8(file, onRead))
   const [out] = await execMedia(args, [{ name: outName, mime: outExt === 'mp4' ? 'video/mp4' : file.type || 'video/mp4' }])
   await unlinkMediaFiles([inName, outName])
   return { blob: out.blob, name: `${file.name.replace(/\.[^.]+$/, '')}-clip.${outExt}`, cmd: 'ffmpeg ' + args.join(' ') }

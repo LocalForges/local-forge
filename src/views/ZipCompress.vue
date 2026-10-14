@@ -4,8 +4,11 @@ import { useRoute } from 'vue-router'
 import DropZone from '../components/DropZone.vue'
 import HelpTip from '../components/HelpTip.vue'
 import StatusPill from '../components/StatusPill.vue'
+import NextSteps from '../components/NextSteps.vue'
 import { createZip } from '../lib/archive.js'
 import { formatSize, downloadBlob } from '../utils.js'
+import { consumePending } from '../lib/workflow.js'
+import { pushToast } from '../lib/toast.js'
 
 const route = useRoute()
 const files = ref([])
@@ -21,6 +24,12 @@ const message = ref(null)
 onMounted(() => {
   if (route.query.split) splitSize.value = 100
   if (route.query.password) password.value = '' // 聚焦密码
+  // 跨工具工作流：接收上一步传来的文件
+  const pending = consumePending()
+  if (pending && pending.files.length) {
+    onFiles(pending.files)
+    pushToast('info', `已从「${pending.from}」载入 ${pending.files.length} 个文件`)
+  }
 })
 
 function onFiles(list) {
@@ -113,5 +122,6 @@ function download() {
     <button v-if="result" class="btn green" @click="download">
       <i class="bi bi-download"></i> 下载 archive.zip ({{ formatSize(result.size) }})
     </button>
+    <NextSteps v-if="result" from="/zip-compress" :files="[{ blob: result, name: 'archive.zip' }]" />
   </div>
 </template>
