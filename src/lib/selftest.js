@@ -19,14 +19,21 @@ export async function runAllSelfTests() {
     // 媒体默认 selfTest() 走多线程内核，在部分无 SharedArrayBuffer / headless 环境下会卡住，
     // 自检面板统一用 selfTestST()（单线程，兼容性好）验证 ffmpeg 管线可用。
     { id: 'media', load: () => import('./media.js'), fn: 'selfTestST' },
+    { id: 'mediapro', load: () => import('./mediapro.js'), fn: 'selfTest' },
     { id: 'pdf', load: () => import('./pdf.js'), fn: 'selfTest' },
+    { id: 'pdfpro', load: () => import('./pdfpro.js'), fn: 'selfTest' },
     { id: 'qrcode', load: () => import('./qrcode.js'), fn: 'selfTest' },
+    { id: 'hash', load: () => import('./hash.js'), fn: 'selfTest' },
+    { id: 'exif', load: () => import('./exif.js'), fn: 'selfTest' },
+    { id: 'text', load: () => import('./text.js'), fn: 'selfTest' },
+    { id: 'ocr', load: () => import('./ocr.js'), fn: 'selfTest' },
   ]
   const results = []
   for (const m of modules) {
     try {
       const mod = await m.load()
-      const rep = await withTimeout(mod[m.fn](), 60000, m.id)
+      // 单模块 120s：ffmpeg / OCR 这类 WASM 内核首次加载较慢，需留足时间
+      const rep = await withTimeout(mod[m.fn](), 120000, m.id)
       results.push(rep)
     } catch (e) {
       results.push({

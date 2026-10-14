@@ -49,6 +49,10 @@ export const TOOLS = [
       { to: '/media-convert', icon: 'bi-arrow-left-right', title: '音视频转换', desc: 'MP4/WebM/MOV/MP3/WAV 互转（ffmpeg 多线程）' },
       { to: '/media-convert?mode=compress', icon: 'bi-speedometer2', title: '压缩媒体', desc: '降低码率缩小体积' },
       { to: '/media-convert?mode=zip', icon: 'bi-music-note', title: 'ZIP → MP3/MP4', desc: '从压缩包内提取媒体' },
+      { to: '/media-pro?tab=gif', icon: 'bi-film', title: '视频转 GIF', desc: '录屏/视频转表情包，可调帧率与宽度' },
+      { to: '/media-pro?tab=audio', icon: 'bi-music-note-beamed', title: '提取音频', desc: '从视频扒出音轨，默认流拷贝无损' },
+      { to: '/media-pro?tab=frames', icon: 'bi-images', title: '视频抽帧', desc: '按间隔导出图片并打包 ZIP' },
+      { to: '/media-pro?tab=clip', icon: 'bi-scissors', title: '裁剪片段', desc: '只保留指定时间段，默认不重编码' },
     ],
   },
   {
@@ -68,12 +72,27 @@ export const TOOLS = [
     ],
   },
   {
+    group: '校验 / 隐私 / 文本',
+    items: [
+      { to: '/hash', icon: 'bi-shield-check', title: '文件哈希校验', desc: 'MD5/SHA-256/CRC32/BLAKE3… 核对下载文件是否被篡改' },
+      { to: '/hash?tab=dup', icon: 'bi-copy', title: '重复文件查找', desc: '按内容（SHA-256）找出完全相同的冗余文件' },
+      { to: '/exif', icon: 'bi-eraser', title: '照片隐私清理', desc: '查看并清除 GPS 定位、设备序列号与拍摄时间（画质无损）' },
+      { to: '/text', icon: 'bi-code-slash', title: '文本 / 编码工具箱', desc: 'JSON · Base64 · JWT · 正则 · 时间戳 · UUID · 密码 · 摘要' },
+      { to: '/ocr', icon: 'bi-card-text', title: 'OCR 图片转文字', desc: '截图 / 照片 / 扫描件提取文字（本地 Tesseract 内核）' },
+      { to: '/ocr?tab=pdf', icon: 'bi-file-earmark-text', title: '扫描版 PDF 识别', desc: '逐页 OCR，支持页码范围与逐页打包 ZIP' },
+    ],
+  },
+  {
     group: '文档 / PDF',
     items: [
       { to: '/pdf-tools?mode=compress', icon: 'bi-file-earmark-pdf', title: '压缩 PDF', desc: '重压缩内嵌图像减小体积' },
       { to: '/pdf-tools?mode=preview', icon: 'bi-eye', title: '预览 PDF', desc: '逐页渲染，本地查看' },
       { to: '/pdf-tools?mode=merge', icon: 'bi-intersect', title: '合并 PDF', desc: '将多个 PDF 合并为一个' },
       { to: '/pdf-tools?mode=split', icon: 'bi-scissors', title: '拆分 PDF', desc: '每页输出为独立 PDF' },
+      { to: '/pdf-pro?tab=img2pdf', icon: 'bi-images', title: '图片转 PDF', desc: '多张截图/照片合成一份 PDF（可选 A4）' },
+      { to: '/pdf-pro?tab=pdf2img', icon: 'bi-file-earmark-image', title: 'PDF 转图片', desc: '逐页渲染 PNG/JPG 并打包 ZIP' },
+      { to: '/pdf-pro?tab=stamp', icon: 'bi-droplet', title: 'PDF 加中文水印', desc: '居中/平铺水印与页码，原文件不变' },
+      { to: '/pdf-pro?tab=organize', icon: 'bi-fonts', title: 'PDF 提取文本', desc: '整册旋转、删页、提取文字与编辑元数据' },
     ],
   },
   {

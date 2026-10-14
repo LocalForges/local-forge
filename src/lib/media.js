@@ -11,28 +11,88 @@ export function onProgress(cb) {
   ffmpeg.on('progress', ({ progress: p }) => { if (p && p > 0 && p < 1) cb(Math.round(p * 100)) })
 }
 
+// 内核偏好：'auto' = 多线程→单线程→CDN；'st' = 直接单线程（自检环境更稳、更快）
+let corePreference = 'auto'
+export function setCorePreference(p) {
+  corePreference = p === 'st' ? 'st' : 'auto'
+}
+
+// 内核 URL 构造器。必须定义在 loadCore 之前——否则函数体内的 const 处于 TDZ，
+// 提前调用会抛 ReferenceError 并被下面的 try/catch 静默吞掉，导致误回落到多线程内核而卡死。
+const mtURLs = async (b) => ({
+  coreURL: await toBlobURL(`${b}/ffmpeg-core.js`, 'text/javascript'),
+  wasmURL: await toBlobURL(`${b}/ffmpeg-core.wasm`, 'application/wasm'),
+  workerURL: await toBlobURL(`${b}/ffmpeg-core.worker.js`, 'text/javascript'),
+})
+const stURLs = async (b) => ({
+  coreURL: await toBlobURL(`${b}/ffmpeg-core.js`, 'text/javascript'),
+  wasmURL: await toBlobURL(`${b}/ffmpeg-core.wasm`, 'application/wasm'),
+})
+
 async function loadCore() {
   if (loaded) return
-  const mt = async (b) => ({
-    coreURL: await toBlobURL(`${b}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobURL(`${b}/ffmpeg-core.wasm`, 'application/wasm'),
-    workerURL: await toBlobURL(`${b}/ffmpeg-core.worker.js`, 'text/javascript'),
-  })
-  const st = async (b) => ({
-    coreURL: await toBlobURL(`${b}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobURL(`${b}/ffmpeg-core.wasm`, 'application/wasm'),
-  })
+  // 0) 调用方显式要求单线程（自检环境更稳，避免多线程内核在无 SharedArrayBuffer 时挂起）
+  if (corePreference === 'st') {
+    try { await ffmpeg.load(await stURLs('/ffmpeg-st')); loaded = true; return }
+    catch (e) { console.warn('[media] 单线程内核加载失败，回退自动选择：', e) }
+  }
   // 1) 多线程（需跨源隔离）
   if (self.crossOriginIsolated) {
-    try { await ffmpeg.load(await mt('/ffmpeg')); loaded = true; return }
-    catch { /* fall through */ }
+    try { await ffmpeg.load(await mtURLs('/ffmpeg')); loaded = true; return }
+    catch (e) { console.warn('[media] 多线程内核加载失败，回退单线程：', e) }
   }
   // 2) 单线程（兼容性好，无需 SharedArrayBuffer）
-  try { await ffmpeg.load(await st('/ffmpeg-st')); loaded = true; return }
-  catch { /* fall through */ }
+  try { await ffmpeg.load(await stURLs('/ffmpeg-st')); loaded = true; return }
+  catch (e) { console.warn('[media] 本地单线程内核加载失败，回退 CDN：', e) }
   // 3) CDN 多线程
-  await ffmpeg.load(await mt('https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.10/dist/esm'))
+  await ffmpeg.load(await mtURLs('https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.10/dist/esm'))
   loaded = true
+}
+
+// 显式触发内核加载（供自检 / 视图预热使用）
+export async function ensureMediaCore() {
+  await loadCore()
+  return coreMode()
+}
+
+// 进阶能力所需的底层接口：写输入 + 执行任意参数 + 一次性取回多个输出文件。
+// 与 convertMedia 共用同一个 ffmpeg 实例（内核只加载一次）。
+export async function writeMediaFile(name, data) {
+  await loadCore()
+  await ffmpeg.writeFile(name, data)
+}
+export async function execMedia(args, outFiles = []) {
+  await loadCore()
+  await ffmpeg.exec(args)
+  const out = []
+  for (const f of outFiles) {
+    const data = await ffmpeg.readFile(f.name)
+    out.push({ name: f.name, blob: new Blob([data.buffer], { type: f.mime || 'application/octet-stream' }) })
+  }
+  return out
+}
+// 只读回已存在的输出文件（不执行任何命令）。
+// 注意：不能用 exec 空参数来"读文件"——ffmpeg 无输入时会打印帮助并以非 0 退出，exec 会 reject。
+export async function readMediaFiles(files) {
+  const out = []
+  for (const f of files) {
+    try {
+      const data = await ffmpeg.readFile(f.name)
+      out.push({ name: f.name, blob: new Blob([data.buffer], { type: f.mime || 'application/octet-stream' }) })
+    } catch {
+      out.push({ name: f.name, blob: null })
+    }
+  }
+  return out
+}
+// 删除虚拟文件系统里的临时文件（避免多次操作后堆积）
+export async function unlinkMediaFiles(names) {
+  for (const n of names) {
+    try { await ffmpeg.deleteFile(n) } catch { /* 不存在则忽略 */ }
+  }
+}
+export function coreMode() {
+  return { loaded, isolated: !!self.crossOriginIsolated }
 }
 
 // 运行一次转换：writeName 为写入虚拟文件系统的输入名，args 为完整 ffmpeg 参数，

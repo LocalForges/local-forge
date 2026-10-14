@@ -91,9 +91,10 @@ body::after {
 .nav { display: flex; gap: 4px; margin-left: 10px; flex-wrap: wrap; }
 .nav a {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 12px; border-radius: 9px; color: var(--muted);
+  padding: 7px 10px; border-radius: 9px; color: var(--muted);
   text-decoration: none; font-size: 13.5px; transition: .18s;
   border: 1px solid transparent;
+  white-space: nowrap;
 }
 .nav a:hover { background: var(--panel-2); color: var(--txt); border-color: var(--line); }
 .nav a.router-link-active {
@@ -105,15 +106,19 @@ body::after {
   border: 1px solid var(--line-strong); padding: 5px 11px; border-radius: 999px;
   display: inline-flex; align-items: center; gap: 6px;
   background: rgba(52, 211, 153, 0.08);
+  white-space: nowrap;
 }
 
-.content { flex: 1; width: 100%; max-width: 960px; margin: 0 auto; padding: 28px 18px 40px; }
+.content { flex: 1; width: 100%; max-width: 1080px; margin: 0 auto; padding: 28px 22px 48px; }
+
+/* 媒体类元素默认不溢出容器（防止大图/视频撑破布局） */
+img, video, canvas { max-width: 100%; height: auto; }
 
 .footer { text-align: center; color: var(--faint); font-size: 12px; padding: 20px; border-top: 1px solid var(--line); }
 
 /* ---------- 页面标题 ---------- */
 h1.page-title {
-  font-size: 26px; margin: 2px 0 6px; font-weight: 700; letter-spacing: .2px;
+  font-size: clamp(21px, 4.5vw, 26px); margin: 2px 0 6px; font-weight: 700; letter-spacing: .2px;
   background: linear-gradient(120deg, #e8edf7, #9fd8ff 60%, #c4b5fd);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
@@ -126,7 +131,7 @@ p.page-sub { color: var(--muted); margin: 0 0 18px; font-size: 13.5px; line-heig
   font-weight: 600; letter-spacing: .3px;
 }
 .cat-title i { color: var(--accent); }
-.tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); gap: 14px; }
+.tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
 .tool-card {
   display: block; text-decoration: none; color: var(--txt);
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
@@ -258,4 +263,34 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56,189,
   content: counter(step); flex: none; width: 20px; height: 20px; border-radius: 50%;
   background: var(--grad-soft); border: 1px solid var(--line-strong); color: var(--accent);
   font-size: 11px; font-weight: 700; display: grid; place-items: center; font-family: var(--mono);
+}
+
+/* ============================================================
+   响应式收口（顶栏抽屉逻辑见 App.vue）
+   ============================================================ */
+@media (max-width: 1080px) {
+  .content { max-width: 100%; }
+}
+/* 平板及更窄：收窄内容留白、压缩面板内边距 */
+@media (max-width: 720px) {
+  .content { padding: 22px 16px 40px; }
+  .panel { padding: 16px; margin-top: 14px; }
+  .cat { margin-top: 22px; }
+  .cat-title { font-size: 14px; }
+  .tool-card { padding: 15px; }
+  .tool-card i { font-size: 23px; }
+  .tool-card h3 { font-size: 14.5px; }
+  .tool-card p { font-size: 12px; }
+  .dropzone { padding: 28px 14px; }
+  .row { gap: 10px; }
+}
+/* 手机：工具卡两列、进一步压缩留白 */
+@media (max-width: 600px) {
+  .tools { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  h1.page-title { margin-top: 4px; }
+}
+@media (max-width: 420px) {
+  .content { padding: 18px 12px 32px; }
+  .tool-card p { font-size: 11.5px; }
+  .panel { padding: 14px; }
 }

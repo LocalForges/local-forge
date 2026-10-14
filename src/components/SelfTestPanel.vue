@@ -62,12 +62,18 @@ const VIEW_ROUTES = [
   { path: '/zip-extract', file: 'ZipExtract.vue' },
   { path: '/archive', file: 'ArchiveTool.vue' },
   { path: '/media-convert', file: 'MediaConvert.vue' },
+  { path: '/media-pro', file: 'MediaPro.vue' },
   { path: '/image-convert', file: 'ImageConvert.vue' },
   { path: '/pdf-tools', file: 'PdfTools.vue' },
+  { path: '/pdf-pro', file: 'PdfPro.vue' },
   { path: '/share-files', file: 'ShareFiles.vue' },
   { path: '/password-recovery', file: 'PasswordRecovery.vue' },
   { path: '/repair', file: 'Repair.vue' },
   { path: '/qr-code', file: 'QrCode.vue' },
+  { path: '/hash', file: 'HashTool.vue' },
+  { path: '/exif', file: 'ExifTool.vue' },
+  { path: '/text', file: 'TextTool.vue' },
+  { path: '/ocr', file: 'OcrTool.vue' },
 ]
 async function runViewSmoke() {
   viewLoading.value = true

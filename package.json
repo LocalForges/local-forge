@@ -36,7 +36,9 @@
     "test:e2e:image": "node _e2e_image.mjs",
     "test:e2e:image:ui": "node _e2e_image_component.mjs",
     "test:e2e:selftest": "node _e2e_selftest.mjs",
-    "test:e2e:qrcode": "node _e2e_qrcode.mjs"
+    "test:e2e:qrcode": "node _e2e_qrcode.mjs",
+    "test:e2e:ocr": "node _e2e_ocr.mjs",
+    "test:e2e:layout": "node _e2e_layout.mjs"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
@@ -44,10 +46,13 @@
     "@zip.js/zip.js": "^2.15.0",
     "bootstrap-icons": "^1.13.1",
     "fflate": "^0.8.3",
+    "hash-wasm": "^4.12.0",
     "libarchive.js": "^2.0.2",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",
     "qrcode": "^1.5.4",
+    "tesseract.js": "^7.0.0",
+    "tesseract.js-core": "7.0.0",
     "upng-js": "^2.1.0",
     "vue": "^3.5.42",
     "vue-router": "^5.3.1",

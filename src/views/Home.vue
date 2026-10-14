@@ -80,7 +80,7 @@ import HelpTip from '../components/HelpTip.vue'
   margin-bottom: 14px;
 }
 .hero-title {
-  font-size: 34px;
+  font-size: clamp(26px, 7vw, 34px);
   line-height: 1.2;
   margin: 0 0 12px;
   font-weight: 800;

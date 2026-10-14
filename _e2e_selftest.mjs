@@ -27,7 +27,7 @@ try {
   })
   await page.waitForFunction(
     () => { const el = document.querySelector('.st-summary'); return el && el.textContent.includes('子测试') },
-    { timeout: 90000 },
+    { timeout: 300000 }, // 含 ffmpeg 内核加载（可能两次），留足时间
   )
 
   // 2) 视图渲染自检
@@ -37,7 +37,7 @@ try {
   })
   await page.waitForFunction(
     () => document.querySelectorAll('.st-views .item-row').length > 0,
-    { timeout: 60000 },
+    { timeout: 180000 },
   )
 
   const info = await page.evaluate(() => {
